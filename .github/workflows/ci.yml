@@ -6,39 +6,110 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: agent/v1.1.0-battle-intervention
+          fetch-depth: 0
+
+      - name: Restore exact v1.0.41 source tail
+        shell: pwsh
+        run: |
+          $path = 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/CareerAbilityRepair.cs'
+          $lines = @(Get-Content $path).Count
+          if ($lines -eq 815) {
+            @'
+			if (value == null)
+			{
+				return "<null>";
+			}
+			try
+			{
+				PropertyInfo propertyInfo = value.GetType().GetProperty("StringId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) ?? value.GetType().GetProperty("StringID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				object obj = ((!(propertyInfo == null)) ? propertyInfo.GetValue(value, null) : null);
+				return (obj != null) ? Convert.ToString(obj) : value.GetType().FullName;
+			}
+			catch
+			{
+				return value.GetType().FullName;
+			}
+		}
+
+		private static string Unwrap(Exception ex)
+		{
+			while (ex is TargetInvocationException && ex.InnerException != null)
+			{
+				ex = ex.InnerException;
+			}
+			return ex.ToString();
+		}
+
+		private static void Log(string message)
+		{
+			try
+			{
+				string text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Mount and Blade II Bannerlord", "ModLogs");
+				Directory.CreateDirectory(text);
+				File.AppendAllText(Path.Combine(text, "MultiCharacterCampaignTOR.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + " [CareerAbilityFix132] " + message + Environment.NewLine);
+			}
+			catch
+			{
+			}
+		}
+	}
+}
+'@ | Add-Content -Path $path -Encoding utf8
+          } elseif ($lines -ne 854) {
+            throw "Unexpected CareerAbilityRepair.cs line count: $lines"
+          }
+          Remove-Item '.restore-career-source-trigger' -ErrorAction SilentlyContinue
+          Remove-Item '.full-build-trigger' -ErrorAction SilentlyContinue
+          Remove-Item '.github/workflows/restore-career-source.yml' -ErrorAction SilentlyContinue
+          if (@(Get-Content $path).Count -ne 854) { throw 'Source restoration did not produce the exact 854-line file.' }
+          if (git status --porcelain) {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -A
+            git commit -m 'Restore truncated runtime compatibility source'
+            git push origin HEAD:agent/v1.1.0-battle-intervention
+          }
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      - name: Restore reference assemblies
+      - name: Restore Bannerlord references
         shell: pwsh
         run: dotnet restore src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj
 
-      - name: Build intervention sidecar
-        shell: pwsh
-        run: dotnet build src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj -c Release --no-restore
-
-      - name: Locate restored Bannerlord assemblies
+      - name: Resolve reference paths
         shell: pwsh
         run: |
-          $matches = @(
-            Get-ChildItem "$env:USERPROFILE\.nuget\packages" -Recurse -Filter TaleWorlds.CampaignSystem.dll -ErrorAction SilentlyContinue
-            Get-ChildItem "$env:GITHUB_WORKSPACE" -Recurse -Filter TaleWorlds.CampaignSystem.dll -ErrorAction SilentlyContinue
-          ) | Sort-Object FullName -Unique
-          $matches | ForEach-Object { Write-Host $_.FullName }
-          if (-not $matches) {
-            Write-Host 'project.assets.json references:'
-            Select-String -Path src/IdentityGuard/obj/project.assets.json -Pattern 'CampaignSystem|ReferenceAssemblies' | Select-Object -First 80
-            throw 'TaleWorlds.CampaignSystem.dll was not found after a successful build.'
+          $campaign = Get-ChildItem "$env:USERPROFILE\.nuget\packages" -Recurse -Filter TaleWorlds.CampaignSystem.dll | Select-Object -First 1
+          if (-not $campaign) { throw 'Bannerlord reference assemblies were not restored.' }
+          $bin = $campaign.Directory.FullName
+          $harmony = Get-ChildItem $bin -Filter 0Harmony.dll | Select-Object -First 1
+          if (-not $harmony) {
+            dotnet new classlib -n HarmonyResolver -o "$env:RUNNER_TEMP\HarmonyResolver" -f netstandard2.0
+            dotnet add "$env:RUNNER_TEMP\HarmonyResolver\HarmonyResolver.csproj" package Lib.Harmony --version 2.3.3
+            dotnet restore "$env:RUNNER_TEMP\HarmonyResolver\HarmonyResolver.csproj"
+            $harmony = Get-ChildItem "$env:USERPROFILE\.nuget\packages\lib.harmony" -Recurse -Filter 0Harmony.dll | Where-Object FullName -Match 'netstandard2.0|net472|net48' | Select-Object -First 1
           }
-          "CAMPAIGN_DLL=$($matches[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if (-not $harmony) { throw '0Harmony.dll was not resolved.' }
+          "BANNERLORD_BIN=$bin" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "HARMONY_DLL=$($harmony.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "CAMPAIGN_DLL=$($campaign.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build complete solution
+        shell: pwsh
+        run: |
+          dotnet restore src/MultiCharacterCampaignTOR.CSharp.sln -p:BannerlordBin="$env:BANNERLORD_BIN" -p:HarmonyDll="$env:HARMONY_DLL" -p:RuntimeHarmonyDll="$env:HARMONY_DLL"
+          dotnet build src/MultiCharacterCampaignTOR.CSharp.sln -c Release --no-restore -p:BannerlordBin="$env:BANNERLORD_BIN" -p:HarmonyDll="$env:HARMONY_DLL" -p:RuntimeHarmonyDll="$env:HARMONY_DLL"
 
       - name: Inspect Bannerlord 1.3.15 battle APIs
         shell: powershell
@@ -71,15 +142,30 @@ jobs:
             }
           }
 
-      - name: Verify output
+      - name: Inventory required outputs
         shell: pwsh
         run: |
-          $dll = 'src/IdentityGuard/bin/Release/MultiCharacterCampaignTOR.IdentityGuard.v140.dll'
-          if (-not (Test-Path $dll)) { throw "Missing $dll" }
-          Get-FileHash $dll -Algorithm SHA256
+          $required = @(
+            'src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll',
+            'src/NativeCreation/bin/Release/MultiCharacterCampaignTOR.NativeCreation.dll',
+            'src/NativeCreation.Legacy/bin/Release/MultiCharacterCampaignTOR.NativeCreation.Legacy.dll',
+            'src/RuntimeCompatibility/bin/Release/MultiCharacterCampaignTOR.RuntimeCompatibility.v140.dll',
+            'src/SettlementPresence/bin/Release/MultiCharacterCampaignTOR.SettlementPresence.v141.dll',
+            'src/IdentityGuard/bin/Release/MultiCharacterCampaignTOR.IdentityGuard.v140.dll'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path $path)) { throw "Missing expected output: $path" }
+            Get-FileHash $path -Algorithm SHA256
+          }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: identityguard-v1.1.0
-          path: src/IdentityGuard/bin/Release/MultiCharacterCampaignTOR.IdentityGuard.v140.dll
+          name: full-module-v1.1.0
+          path: |
+            src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll
+            src/NativeCreation/bin/Release/MultiCharacterCampaignTOR.NativeCreation.dll
+            src/NativeCreation.Legacy/bin/Release/MultiCharacterCampaignTOR.NativeCreation.Legacy.dll
+            src/RuntimeCompatibility/bin/Release/MultiCharacterCampaignTOR.RuntimeCompatibility.v140.dll
+            src/SettlementPresence/bin/Release/MultiCharacterCampaignTOR.SettlementPresence.v141.dll
+            src/IdentityGuard/bin/Release/MultiCharacterCampaignTOR.IdentityGuard.v140.dll
           if-no-files-found: error
