@@ -1,0 +1,68 @@
+name: Bootstrap repository and validate
+
+on:
+  push:
+    branches: ["agent/v1.1.0-battle-intervention"]
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap-and-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify and expand source repository
+        shell: pwsh
+        run: |
+          $manifest = Get-Content .bootstrap/manifest.json | ConvertFrom-Json
+          $baseline = "baseline/MultiCharacterCampaignTOR-v1.0.41-source-baseline.zip"
+          $baselineHash = (Get-FileHash $baseline -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($baselineHash -ne $manifest.baseline_sha256) { throw "Baseline hash mismatch" }
+          New-Item -ItemType Directory -Force -Path src,module | Out-Null
+          Expand-Archive $baseline -DestinationPath "$env:RUNNER_TEMP/baseline"
+          Copy-Item "$env:RUNNER_TEMP/baseline/Modules/MultiCharacterCampaignTOR/Source/CSharp/*" src -Recurse -Force
+          foreach ($name in @("SubModule.xml","README.md","CHANGELOG.md","INSTALLATION.txt","SOURCE_INFO.md")) {
+            Copy-Item "$env:RUNNER_TEMP/baseline/Modules/MultiCharacterCampaignTOR/$name" "module/$name" -Force
+          }
+          $encoded = (Get-ChildItem .bootstrap/overlay.tar.xz.b64/part-*.txt | Sort-Object Name | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }) -join ""
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP/overlay.tar.xz", [Convert]::FromBase64String($encoded))
+          $overlayHash = (Get-FileHash "$env:RUNNER_TEMP/overlay.tar.xz" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($overlayHash -ne $manifest.overlay_sha256) { throw "Overlay hash mismatch" }
+          tar -xJf "$env:RUNNER_TEMP/overlay.tar.xz" -C .
+          Remove-Item .bootstrap,.github/workflows/bootstrap.yml -Recurse -Force
+      - name: Commit expanded repository
+        shell: pwsh
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Add v1.1.0 source, battle intervention, and release pipeline"
+          git push origin "HEAD:$env:GITHUB_REF_NAME"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore
+        run: dotnet restore src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj
+      - name: Build maintained sidecar
+        run: dotnet build src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj -c Release --no-restore
+      - name: Package complete module
+        shell: pwsh
+        run: |
+          python scripts/package_release.py `
+            --baseline baseline/MultiCharacterCampaignTOR-v1.0.41-source-baseline.zip `
+            --source src `
+            --module-metadata module `
+            --identity-dll src/IdentityGuard/bin/Release/MultiCharacterCampaignTOR.IdentityGuard.v140.dll `
+            --output-dir dist `
+            --version 1.1.0
+      - name: Upload validation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MultiCharacterCampaignTOR-v1.1.0-bootstrap-validation
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
