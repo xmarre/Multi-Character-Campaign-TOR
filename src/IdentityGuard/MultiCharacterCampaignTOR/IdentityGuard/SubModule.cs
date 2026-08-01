@@ -20,12 +20,15 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			BattleInterventionPredictionPriorityBridge.Install();
 			BattleAlertUiHotfix.Install();
 			ManagerReturnHotfix.Install();
+			BattleInterventionThresholdPolicy.Install();
+			BattleReinforcementOrderGuard.Install();
 		}
 
 		protected override void OnApplicationTick(float dt)
 		{
 			base.OnApplicationTick(dt);
 			BattleInterventionAlert.Tick();
+			BattleReinforcementOrderGuard.Tick(dt);
 		}
 	}
 }

@@ -1,0 +1,15 @@
+## v1.3.0
+- Replaced the binary battle-alert policy with a configurable 0–100% friendly native-strength-share threshold.
+- Added support for close and difficult predicted victories, including practical 55%, 60%, 67%, and 75% threshold examples.
+- Preserved existing-save behavior by migrating the old predicted-loss-only policy to 50% and the old every-battle policy to 100%.
+- Continued to show alerts when Bannerlord cannot produce a valid strength forecast, so prediction failures do not silently hide endangered shared parties.
+- Re-evaluated the configured threshold when another party joins an active battle.
+- Clarified that the threshold uses Bannerlord's current native side-strength estimate and is not an exact casualty forecast.
+- Fixed the standalone reinforcement action moving the player party only briefly before stopping.
+- Replaced EngageParty routing against the hidden in-battle party with movement to the active battle site.
+- Added native battle interaction when the reinforcing party reaches Bannerlord's encounter distance.
+- Added a temporary AI objective lock for the original party after combined takeover and reinforcement, preventing unrelated AI decisions from replacing the battle destination.
+- Restored a lost AI reinforcement route while the selected battle remains active.
+- Released the AI objective lock when the party joins, the battle ends, the order becomes invalid, or the campaign changes.
+- Allowed direct player movement orders to cancel reinforcement cleanly instead of repeatedly overriding player input.
+- Added no global party scans; only active reinforcement orders are checked.
