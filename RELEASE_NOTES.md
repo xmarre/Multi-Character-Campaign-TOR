@@ -4,6 +4,8 @@ Released: 2 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
+Validated source merge: `02f95d6ce1b939cbdd608ad3abbf48d0bf6ef730`.
+
 ## Granular battle-alert threshold
 
 The previous binary choice has been replaced with one configurable threshold from 0% to 100%.
@@ -35,7 +37,7 @@ Version 1.3.0 instead:
 - permits the player to replace the movement order normally;
 - stops and reports the order if the battle ends before arrival.
 
-For a combined **take control + reinforce** action, the original party becomes AI-controlled after the handoff. It receives a temporary no-new-decisions lock tied only to that reinforcement order. The route is restored if ordinary AI processing replaces it, and the lock is released as soon as the party joins, the battle ends, the order becomes invalid, or the campaign changes. The party should therefore not select unrelated objectives on the way to the chosen battle.
+For a combined **take control + reinforce** action, the original party becomes AI-controlled after the handoff. It receives a temporary no-new-decisions lock tied only to that reinforcement order. The route is restored if ordinary AI processing replaces it. Its previous decision-lock and hourly-rethink values are restored when the reinforcement order ends, so state owned by another system is not blindly reset. The party should therefore not select unrelated objectives on the way to the chosen battle.
 
 ## Existing intervention behavior retained
 
@@ -54,7 +56,8 @@ For a combined **take control + reinforce** action, the original party becomes A
 
 ## Validation
 
-- Complete six-project Release build against Bannerlord 1.3.15 reference assemblies.
+- Complete six-project Release build against Bannerlord 1.3.15 reference assemblies: zero warnings and zero errors.
 - Exact native movement, party-interaction, AI-decision-lock, encounter-distance, strength-query, text-inquiry, and map-event callback surfaces are checked by CI.
 - The .NET Framework/Harmony smoke runner loads the built module and installs both new runtime patches.
+- Final pre-merge CI artifact: `full-module-v1.3.0`, artifact ID `8824928958`, digest `b2044cd99cc8fbf8d1a66cb30062c02f1cede9caece5ecf222c7622b397c271c`.
 - Live campaign testing remains required for Gauntlet input rendering, player-party arrival interaction, and the AI-controlled outgoing party's full trip to a real battle.
