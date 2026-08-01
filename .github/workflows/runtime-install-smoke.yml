@@ -1,0 +1,48 @@
+name: Runtime patch installation smoke
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore references
+        shell: pwsh
+        run: |
+          dotnet restore src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj
+          $campaign = Get-ChildItem "$env:USERPROFILE\.nuget\packages" -Recurse -Filter TaleWorlds.CampaignSystem.dll | Select-Object -First 1
+          if (-not $campaign) { throw 'Bannerlord references missing.' }
+          $bin = $campaign.Directory.FullName
+          dotnet new classlib -n HarmonyResolver -o "$env:RUNNER_TEMP\HarmonyResolver" -f netstandard2.0
+          dotnet add "$env:RUNNER_TEMP\HarmonyResolver\HarmonyResolver.csproj" package Lib.Harmony --version 2.3.3
+          dotnet restore "$env:RUNNER_TEMP\HarmonyResolver\HarmonyResolver.csproj"
+          $harmony = Get-ChildItem "$env:USERPROFILE\.nuget\packages\lib.harmony" -Recurse -Filter 0Harmony.dll | Where-Object FullName -Match 'net472' | Select-Object -First 1
+          if (-not $harmony) { throw 'Harmony reference missing.' }
+          "BANNERLORD_BIN=$bin" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "HARMONY_DLL=$($harmony.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build module
+        shell: pwsh
+        run: |
+          dotnet restore src/MultiCharacterCampaignTOR.CSharp.sln -p:BannerlordBin="$env:BANNERLORD_BIN" -p:HarmonyDll="$env:HARMONY_DLL" -p:RuntimeHarmonyDll="$env:HARMONY_DLL"
+          dotnet build src/MultiCharacterCampaignTOR.CSharp.sln -c Release --no-restore -p:BannerlordBin="$env:BANNERLORD_BIN" -p:HarmonyDll="$env:HARMONY_DLL" -p:RuntimeHarmonyDll="$env:HARMONY_DLL"
+
+      - name: Build and run installer smoke test
+        shell: pwsh
+        run: |
+          dotnet restore scripts/RuntimeInstallSmoke/RuntimeInstallSmoke.csproj
+          dotnet build scripts/RuntimeInstallSmoke/RuntimeInstallSmoke.csproj -c Release --no-restore
+          $exe = Resolve-Path 'scripts/RuntimeInstallSmoke/bin/Release/net472/RuntimeInstallSmoke.exe'
+          & $exe $env:GITHUB_WORKSPACE $env:BANNERLORD_BIN $env:HARMONY_DLL
+          if ($LASTEXITCODE -ne 0) { throw "Runtime installer smoke test failed with exit code $LASTEXITCODE." }
