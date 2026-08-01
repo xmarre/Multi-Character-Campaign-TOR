@@ -45,7 +45,7 @@ jobs:
           dotnet restore src/MultiCharacterCampaignTOR.CSharp.sln -p:BannerlordBin="$env:BANNERLORD_BIN" -p:HarmonyDll="$env:HARMONY_DLL" -p:RuntimeHarmonyDll="$env:HARMONY_DLL"
           dotnet build src/MultiCharacterCampaignTOR.CSharp.sln -c Release --no-restore -p:BannerlordBin="$env:BANNERLORD_BIN" -p:HarmonyDll="$env:HARMONY_DLL" -p:RuntimeHarmonyDll="$env:HARMONY_DLL"
 
-      - name: Inspect Bannerlord 1.3.15 battle APIs
+      - name: Inspect Bannerlord 1.3.15 finance and battle APIs
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -61,20 +61,53 @@ jobs:
           $asm = [System.Reflection.Assembly]::LoadFrom($campaignDll.FullName)
           $flags = [System.Reflection.BindingFlags]'Public,NonPublic,Instance,Static'
           foreach ($spec in @(
-            @('TaleWorlds.CampaignSystem.CampaignEventDispatcher','OnMapEventStarted'),
-            @('TaleWorlds.CampaignSystem.CampaignEventDispatcher','OnMapEventEnded'),
-            @('TaleWorlds.CampaignSystem.Encounters.PlayerEncounter','RestartPlayerEncounter'),
-            @('TaleWorlds.CampaignSystem.Encounters.PlayerEncounter','Init'),
-            @('TaleWorlds.CampaignSystem.Encounters.PlayerEncounter','Start')
+            @('TaleWorlds.CampaignSystem.CampaignEventDispatcher','OnMapEventStarted',3),
+            @('TaleWorlds.CampaignSystem.CampaignEventDispatcher','OnPartyAddedToMapEvent',1),
+            @('TaleWorlds.CampaignSystem.CampaignEventDispatcher','OnMapEventEnded',1),
+            @('TaleWorlds.CampaignSystem.GameComponents.DefaultClanFinanceModel','AddIncomeFromParty',4),
+            @('TaleWorlds.CampaignSystem.Encounters.PlayerEncounter','RestartPlayerEncounter',3),
+            @('TaleWorlds.CampaignSystem.Encounters.PlayerEncounter','Init',0),
+            @('TaleWorlds.CampaignSystem.Encounters.PlayerEncounter','Start',0)
           )) {
             $type = $asm.GetType($spec[0], $true)
-            $methods = $type.GetMethods($flags) | Where-Object Name -eq $spec[1]
-            if (-not $methods) { throw "Missing $($spec[0]).$($spec[1])" }
+            $methods = @($type.GetMethods($flags) | Where-Object { $_.Name -eq $spec[1] -and $_.GetParameters().Length -eq $spec[2] })
+            if (-not $methods) { throw "Missing $($spec[0]).$($spec[1])/$($spec[2])" }
             foreach ($method in $methods) {
               $parameters = ($method.GetParameters() | ForEach-Object { "$($_.ParameterType.FullName) $($_.Name)" }) -join ', '
               Write-Host "$($method.ReturnType.FullName) $($type.FullName).$($method.Name)($parameters) static=$($method.IsStatic)"
             }
           }
+
+      - name: Inspect MCC runtime patch surfaces
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [System.AppDomain]::CurrentDomain.add_AssemblyResolve({
+            param($sender, $args)
+            $name = (New-Object System.Reflection.AssemblyName($args.Name)).Name + '.dll'
+            $candidate = Join-Path $env:BANNERLORD_BIN $name
+            if (Test-Path $candidate) { return [System.Reflection.Assembly]::LoadFrom($candidate) }
+            if ($name -eq '0Harmony.dll' -and (Test-Path $env:HARMONY_DLL)) { return [System.Reflection.Assembly]::LoadFrom($env:HARMONY_DLL) }
+            return $null
+          })
+          $harmonyAssembly = [System.Reflection.Assembly]::LoadFrom($env:HARMONY_DLL)
+          foreach ($reference in (Get-ChildItem $env:BANNERLORD_BIN -Filter '*.dll')) {
+            try { [void][System.Reflection.Assembly]::LoadFrom($reference.FullName) } catch { }
+          }
+          $core = [System.Reflection.Assembly]::LoadFrom((Resolve-Path 'src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll'))
+          $identity = [System.Reflection.Assembly]::LoadFrom((Resolve-Path 'src/IdentityGuard/bin/Release/MultiCharacterCampaignTOR.IdentityGuard.v140.dll'))
+          $flags = [System.Reflection.BindingFlags]'Public,NonPublic,Instance,Static'
+          $behavior = $core.GetType('MultiCharacterCampaignTOR.MultiCharacterCampaignBehavior', $true)
+          $sync = @($behavior.GetMethods($flags) | Where-Object { $_.Name -eq 'SynchronizeGold' -and $_.GetParameters().Length -eq 1 })
+          if ($sync.Count -ne 1) { throw "Expected one SynchronizeGold(int), found $($sync.Count)." }
+          $fixes = $identity.GetType('MultiCharacterCampaignTOR.IdentityGuard.SharedPartyRuntimeFixes', $true)
+          foreach ($name in @('BeforeSynchronizeGold','AfterSynchronizeGold','BeforeAddIncomeFromParty','BeforeIsDefenderInMapEvent','AfterCanUseRemoteParty','AfterPartyAddedToMapEvent')) {
+            if (-not $fixes.GetMethod($name, $flags)) { throw "Missing runtime patch method $name" }
+          }
+          $safety = $identity.GetType('MultiCharacterCampaignTOR.IdentityGuard.BattleTakeoverSafetyGuard', $true)
+          if (-not $safety.GetMethod('AfterCanUseRemoteParty', $flags)) { throw 'Missing final battle takeover safety postfix.' }
+          $harmonyMethod = $harmonyAssembly.GetType('HarmonyLib.HarmonyMethod', $true)
+          if (-not $harmonyMethod.GetField('priority', $flags)) { throw 'HarmonyMethod.priority is unavailable.' }
 
       - name: Inventory required outputs
         shell: pwsh
@@ -94,7 +127,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: full-module-v1.1.0
+          name: full-module-v1.1.1
           path: |
             src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll
             src/NativeCreation/bin/Release/MultiCharacterCampaignTOR.NativeCreation.dll
