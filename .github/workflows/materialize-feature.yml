@@ -1,4 +1,4 @@
-name: Materialize staged feature branch
+name: Repair feature source branch
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  materialize:
+  repair:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,34 +17,69 @@ jobs:
           ref: agent/v1.1.0-battle-intervention
           fetch-depth: 0
 
-      - name: Decode, validate, and materialize payload
+      - name: Restore exact v1.0.41 CareerAbilityRepair tail
         shell: bash
         run: |
           set -euo pipefail
-          payload=/tmp/mcc-final-payload.tar.xz
-          out=/tmp/mcc-materialized
-          cat .bootstrap/final-payload.tar.xz.b64/part-*.txt | base64 --decode > "$payload"
-          xz --test "$payload"
-          mkdir -p "$out"
-          tar -xJf "$payload" -C "$out"
+          file=src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/CareerAbilityRepair.cs
+          lines="$(wc -l < "$file" | tr -d ' ')"
+          if [[ "$lines" == 815 ]]; then
+            cat >> "$file" <<'EOF'
+			if (value == null)
+			{
+				return "<null>";
+			}
+			try
+			{
+				PropertyInfo propertyInfo = value.GetType().GetProperty("StringId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) ?? value.GetType().GetProperty("StringID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				object obj = ((!(propertyInfo == null)) ? propertyInfo.GetValue(value, null) : null);
+				return (obj != null) ? Convert.ToString(obj) : value.GetType().FullName;
+			}
+			catch
+			{
+				return value.GetType().FullName;
+			}
+		}
 
-          src="$out"
-          if [[ ! -d "$src/Modules" ]]; then
-            candidate="$(find "$src" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-            if [[ -n "$candidate" && -d "$candidate/Modules" ]]; then
-              src="$candidate"
-            fi
+		private static string Unwrap(Exception ex)
+		{
+			while (ex is TargetInvocationException && ex.InnerException != null)
+			{
+				ex = ex.InnerException;
+			}
+			return ex.ToString();
+		}
+
+		private static void Log(string message)
+		{
+			try
+			{
+				string text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Mount and Blade II Bannerlord", "ModLogs");
+				Directory.CreateDirectory(text);
+				File.AppendAllText(Path.Combine(text, "MultiCharacterCampaignTOR.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + " [CareerAbilityFix132] " + message + Environment.NewLine);
+			}
+			catch
+			{
+			}
+		}
+	}
+}
+EOF
+          elif [[ "$lines" != 854 ]]; then
+            echo "Unexpected source line count: $lines" >&2
+            exit 1
           fi
 
-          test -f "$src/Modules/MultiCharacterCampaignTOR/SubModule.xml"
-          test -d "$src/Modules/MultiCharacterCampaignTOR/Source/CSharp"
-          grep -RIl --include='*.cs' -E 'MapEvent|map event' "$src/Modules/MultiCharacterCampaignTOR/Source/CSharp" >/dev/null
-
-          rsync -a --delete --exclude='.git/' "$src/" "$GITHUB_WORKSPACE/"
-          git status --short
+          rm -f .restore-career-source-trigger .full-build-trigger
+          rm -f .github/workflows/restore-career-source.yml
+          test "$(wc -l < "$file" | tr -d ' ')" = 854
+          git diff --check
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
-          git diff --cached --quiet && { echo 'Payload produced no changes'; exit 1; }
-          git commit -m "Materialize v1.1.0 source and release pipeline"
+          if git diff --cached --quiet; then
+            echo 'Feature branch already repaired.'
+            exit 0
+          fi
+          git commit -m "Restore truncated runtime compatibility source"
           git push origin HEAD:agent/v1.1.0-battle-intervention
