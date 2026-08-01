@@ -24,7 +24,7 @@ $oneByte = @{}
 $twoByte = @{}
 foreach ($field in [System.Reflection.Emit.OpCodes].GetFields([System.Reflection.BindingFlags]'Public,Static')) {
     $opcode = [System.Reflection.Emit.OpCode]$field.GetValue($null)
-    $value = [uint16]([int16]$opcode.Value)
+    $value = ([int]$opcode.Value) -band 0xffff
     if ($value -le 0xff) { $oneByte[[int]$value] = $opcode }
     elseif (($value -band 0xff00) -eq 0xfe00) { $twoByte[[int]($value -band 0xff)] = $opcode }
 }
