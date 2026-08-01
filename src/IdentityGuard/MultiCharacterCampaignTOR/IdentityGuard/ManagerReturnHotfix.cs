@@ -8,7 +8,7 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 {
 	internal static class ManagerReturnHotfix
 	{
-		private const string ManagerMenuId = "tor_shared_campaign_manage";
+		private const string ManagerMenuId = "multi_character_campaign_tor";
 		private const BindingFlags InstanceFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 		private const BindingFlags StaticFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
 
