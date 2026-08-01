@@ -115,10 +115,12 @@ jobs:
           }
           $safety = $identity.GetType('MultiCharacterCampaignTOR.IdentityGuard.BattleTakeoverSafetyGuard', $true)
           if (-not $safety.GetMethod('AfterCanUseRemoteParty', $flags)) { throw 'Missing final battle takeover safety postfix.' }
-          $flow = $identity.GetType('MultiCharacterCampaignTOR.IdentityGuard.BattleInterventionFlowFix', $true)
-          foreach ($name in @('BeforeShowInquiry','BeforeContinueBattleAsPlayer','CanOrderPartyToBattle','OrderPartyToBattle')) {
-            if (-not $flow.GetMethod($name, $flags)) { throw "Missing battle-intervention flow method $name" }
+          $flowSource = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleInterventionFlowFix.cs' -Raw
+          foreach ($surface in @('BeforeShowInquiry','BeforeContinueBattleAsPlayer','CanOrderPartyToBattle','OrderPartyToBattle','EncounterManager','SetMoveEngageParty')) {
+            if ($flowSource -notmatch [regex]::Escape($surface)) { throw "Missing battle-intervention flow surface $surface" }
           }
+          $submoduleSource = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/SubModule.cs' -Raw
+          if ($submoduleSource -notmatch 'BattleInterventionFlowFix\.Install\(\)') { throw 'BattleInterventionFlowFix is not installed by the IdentityGuard submodule.' }
           $harmonyMethod = $harmonyAssembly.GetType('HarmonyLib.HarmonyMethod', $true)
           if (-not $harmonyMethod.GetField('priority', $flags)) { throw 'HarmonyMethod.priority is unavailable.' }
 
