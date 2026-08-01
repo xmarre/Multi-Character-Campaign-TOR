@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>MultiCharacterCampaignTOR.SettlementPresence.v141</AssemblyName>
+    <RootNamespace>MultiCharacterCampaignTOR.SettlementPresence</RootNamespace>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="TaleWorlds.CampaignSystem"><HintPath>$(BannerlordBin)\TaleWorlds.CampaignSystem.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.MountAndBlade"><HintPath>$(BannerlordBin)\TaleWorlds.MountAndBlade.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.ObjectSystem"><HintPath>$(BannerlordBin)\TaleWorlds.ObjectSystem.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.Localization"><HintPath>$(BannerlordBin)\TaleWorlds.Localization.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

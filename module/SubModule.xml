@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Module>
+  <Name value="Multi-Character Campaign - TOR" />
+  <!-- Legacy module ID retained so existing saves still recognize the module. -->
+  <Id value="TORSharedCharacterCampaign" />
+  <Version value="v1.1.0" />
+  <DefaultModule value="false" />
+  <ModuleCategory value="Singleplayer" />
+  <DependedModules>
+    <DependedModule Id="Native" />
+    <DependedModule Id="SandBoxCore" />
+    <DependedModule Id="Sandbox" />
+    <DependedModule Id="Bannerlord.Harmony" />
+    <DependedModule Id="TOR_Core" />
+  </DependedModules>
+  <SubModules>
+    <SubModule>
+      <Name value="Multi-Character Campaign - TOR Runtime Compatibility" />
+      <DLLName value="MultiCharacterCampaignTOR.RuntimeCompatibility.v140.dll" />
+      <SubModuleClassType value="MultiCharacterCampaignTOR.RuntimeCompatibility.SubModule" />
+      <Tags>
+        <Tag key="DedicatedServerType" value="none" />
+        <Tag key="IsNoRenderModeElement" value="false" />
+      </Tags>
+    </SubModule>
+    <SubModule>
+      <Name value="Multi-Character Campaign - TOR" />
+      <DLLName value="MultiCharacterCampaignTOR.dll" />
+      <SubModuleClassType value="MultiCharacterCampaignTOR.SubModule" />
+      <Tags>
+        <Tag key="DedicatedServerType" value="none" />
+        <Tag key="IsNoRenderModeElement" value="false" />
+      </Tags>
+    </SubModule>
+    <SubModule>
+      <Name value="Multi-Character Campaign - TOR Identity and Remote-Party Integration" />
+      <DLLName value="MultiCharacterCampaignTOR.IdentityGuard.v140.dll" />
+      <SubModuleClassType value="MultiCharacterCampaignTOR.IdentityGuard.SubModule" />
+      <Tags>
+        <Tag key="DedicatedServerType" value="none" />
+        <Tag key="IsNoRenderModeElement" value="false" />
+      </Tags>
+    </SubModule>
+    <SubModule>
+      <Name value="Multi-Character Campaign - TOR Settlement Presence Repair" />
+      <DLLName value="MultiCharacterCampaignTOR.SettlementPresence.v141.dll" />
+      <SubModuleClassType value="MultiCharacterCampaignTOR.SettlementPresence.SubModule" />
+      <Tags>
+        <Tag key="DedicatedServerType" value="none" />
+        <Tag key="IsNoRenderModeElement" value="false" />
+      </Tags>
+    </SubModule>
+  </SubModules>
+  <Xmls />
+</Module>
