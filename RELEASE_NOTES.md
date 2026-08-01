@@ -4,6 +4,8 @@ Released: 1 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
+Validated source merge: `09c85968587f46fce403ddff7c3a6770bd073977`.
+
 ## Optional predicted-loss alerts
 
 - Shared-character battle alerts can now be limited to battles that Bannerlord currently predicts the character's side will lose.
