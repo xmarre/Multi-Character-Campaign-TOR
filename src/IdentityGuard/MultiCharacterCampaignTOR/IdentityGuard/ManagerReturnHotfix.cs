@@ -77,7 +77,8 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			try
 			{
 				EnsureCampaignState();
-				if (!string.Equals(GetCurrentMenuId(), ManagerMenuId, StringComparison.Ordinal))
+				string currentMenuId = GetCurrentMenuId();
+				if (!_managerSessionActive || (!string.IsNullOrEmpty(currentMenuId) && !string.Equals(currentMenuId, ManagerMenuId, StringComparison.Ordinal)))
 				{
 					return true;
 				}
