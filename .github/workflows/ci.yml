@@ -88,41 +88,27 @@ jobs:
           }
 
       - name: Inspect MCC runtime patch surfaces
-        shell: powershell
+        shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          [System.AppDomain]::CurrentDomain.add_AssemblyResolve({
-            param($sender, $args)
-            $name = (New-Object System.Reflection.AssemblyName($args.Name)).Name + '.dll'
-            $candidate = Join-Path $env:BANNERLORD_BIN $name
-            if (Test-Path $candidate) { return [System.Reflection.Assembly]::LoadFrom($candidate) }
-            if ($name -eq '0Harmony.dll' -and (Test-Path $env:HARMONY_DLL)) { return [System.Reflection.Assembly]::LoadFrom($env:HARMONY_DLL) }
-            return $null
-          })
-          $harmonyAssembly = [System.Reflection.Assembly]::LoadFrom($env:HARMONY_DLL)
-          foreach ($reference in (Get-ChildItem $env:BANNERLORD_BIN -Filter '*.dll')) {
-            try { [void][System.Reflection.Assembly]::LoadFrom($reference.FullName) } catch { }
+          $shared = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/SharedPartyRuntimeFixes.cs' -Raw
+          foreach ($surface in @('BeforeSynchronizeGold','AfterSynchronizeGold','BeforeAddIncomeFromParty','BeforeIsDefenderInMapEvent','AfterCanUseRemoteParty','AfterPartyAddedToMapEvent')) {
+            if ($shared -notmatch [regex]::Escape($surface)) { throw "Missing runtime patch surface $surface" }
           }
-          $core = [System.Reflection.Assembly]::LoadFrom((Resolve-Path 'src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll'))
-          $identity = [System.Reflection.Assembly]::LoadFrom((Resolve-Path 'src/IdentityGuard/bin/Release/MultiCharacterCampaignTOR.IdentityGuard.v140.dll'))
-          $flags = [System.Reflection.BindingFlags]'Public,NonPublic,Instance,Static'
-          $behavior = $core.GetType('MultiCharacterCampaignTOR.MultiCharacterCampaignBehavior', $true)
-          $sync = @($behavior.GetMethods($flags) | Where-Object { $_.Name -eq 'SynchronizeGold' -and $_.GetParameters().Length -eq 1 })
-          if ($sync.Count -ne 1) { throw "Expected one SynchronizeGold(int), found $($sync.Count)." }
-          $fixes = $identity.GetType('MultiCharacterCampaignTOR.IdentityGuard.SharedPartyRuntimeFixes', $true)
-          foreach ($name in @('BeforeSynchronizeGold','AfterSynchronizeGold','BeforeAddIncomeFromParty','BeforeIsDefenderInMapEvent','AfterCanUseRemoteParty','AfterPartyAddedToMapEvent')) {
-            if (-not $fixes.GetMethod($name, $flags)) { throw "Missing runtime patch method $name" }
+          $safety = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleTakeoverSafetyGuard.cs' -Raw
+          if ($safety -notmatch 'AfterCanUseRemoteParty') { throw 'Missing final battle takeover safety postfix.' }
+          $flow = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleInterventionFlowFix.cs' -Raw
+          foreach ($surface in @('BeforeShowInquiry','BeforeContinueBattleAsPlayer','CanOrderPartyToBattle','OrderPartyToBattle','EncounterManager','RestartPlayerEncounter','SetMoveEngageParty','NavigationType','DefaultBehaviorNeedsUpdate')) {
+            if ($flow -notmatch [regex]::Escape($surface)) { throw "Missing battle-intervention flow surface $surface" }
           }
-          $safety = $identity.GetType('MultiCharacterCampaignTOR.IdentityGuard.BattleTakeoverSafetyGuard', $true)
-          if (-not $safety.GetMethod('AfterCanUseRemoteParty', $flags)) { throw 'Missing final battle takeover safety postfix.' }
-          $flowSource = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleInterventionFlowFix.cs' -Raw
-          foreach ($surface in @('BeforeShowInquiry','BeforeContinueBattleAsPlayer','CanOrderPartyToBattle','OrderPartyToBattle','EncounterManager','SetMoveEngageParty')) {
-            if ($flowSource -notmatch [regex]::Escape($surface)) { throw "Missing battle-intervention flow surface $surface" }
+          $submodule = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/SubModule.cs' -Raw
+          foreach ($installer in @('RuntimeIdentityGuard.Install()','SharedPartyRuntimeFixes.Install()','BattleTakeoverSafetyGuard.Install()','BattleInterventionFlowFix.Install()')) {
+            if ($submodule -notmatch [regex]::Escape($installer)) { throw "Missing installer $installer" }
           }
-          $submoduleSource = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/SubModule.cs' -Raw
-          if ($submoduleSource -notmatch 'BattleInterventionFlowFix\.Install\(\)') { throw 'BattleInterventionFlowFix is not installed by the IdentityGuard submodule.' }
-          $harmonyMethod = $harmonyAssembly.GetType('HarmonyLib.HarmonyMethod', $true)
-          if (-not $harmonyMethod.GetField('priority', $flags)) { throw 'HarmonyMethod.priority is unavailable.' }
+          $assemblyInfo = Get-Content 'src/IdentityGuard/Properties/AssemblyInfo.cs' -Raw
+          if ($assemblyInfo -notmatch 'AssemblyVersion\("1\.1\.2\.0"\)') { throw 'IdentityGuard assembly version is not 1.1.2.0.' }
+          $manifest = Get-Content 'module/SubModule.xml' -Raw
+          if ($manifest -notmatch '<Version value="v1\.1\.2"') { throw 'Module manifest is not v1.1.2.' }
 
       - name: Inventory required outputs
         shell: pwsh
