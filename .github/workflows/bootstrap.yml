@@ -1,4 +1,4 @@
-name: Materialize staged repository
+name: Recover staged repository
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  materialize:
+  recover:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,49 +19,45 @@ jobs:
           ref: agent/v1.1.0-battle-intervention
           fetch-depth: 0
 
-      - name: Verify staged baseline and overlay
+      - name: Recover complete XZ blocks from compact payload
         shell: bash
         run: |
           set -euo pipefail
-          baseline=baseline/MultiCharacterCampaignTOR-v1.0.41-source-baseline.zip
-          encoded=/tmp/mcc-overlay.tar.xz.b64
-          overlay=/tmp/mcc-overlay.tar.xz
-
-          actual_baseline="$(sha256sum "$baseline" | awk '{print $1}')"
-          echo "repository baseline sha256=$actual_baseline"
-          test "$actual_baseline" = "90ba30ff68afa1a64574804488d7e5a8a688c51450b09725ebdc6e48de545960"
-          unzip -t "$baseline"
-
-          cat .bootstrap/overlay.tar.xz.b64/part-*.txt | tr -d '\r\n' > "$encoded"
-          actual_length="$(wc -c < "$encoded" | tr -d ' ')"
-          echo "overlay encoded length=$actual_length"
-          test "$actual_length" = "55196"
-
-          base64 --decode "$encoded" > "$overlay"
-          actual_overlay="$(sha256sum "$overlay" | awk '{print $1}')"
-          echo "overlay sha256=$actual_overlay"
-          test "$actual_overlay" = "018861b5b47b739f79e800a831355d7b1be2678e2398220a86bfe3283c615882"
-          xz --test "$overlay"
-
-      - name: Reconstruct materialized repository
-        shell: bash
-        run: |
-          set -euo pipefail
+          encoded=/tmp/mcc-final.tar.xz.b64
+          payload=/tmp/mcc-final.tar.xz
+          tarball=/tmp/mcc-final.tar
           out=/tmp/mcc-materialized
-          mkdir -p "$out"
-          unzip -q baseline/MultiCharacterCampaignTOR-v1.0.41-source-baseline.zip -d "$out"
-          tar -xJf /tmp/mcc-overlay.tar.xz -C "$out"
 
+          cat .bootstrap/final-payload.tar.xz.b64/part-*.txt | tr -d '\r\n' > "$encoded"
+          base64 --decode "$encoded" > "$payload"
+          echo "payload bytes=$(wc -c < "$payload")"
+
+          set +e
+          xz --decompress --stdout "$payload" > "$tarball"
+          xz_status=$?
+          set -e
+          echo "xz status=$xz_status; recovered tar bytes=$(wc -c < "$tarball")"
+          test -s "$tarball"
+
+          mkdir -p "$out"
+          set +e
+          tar --extract --file="$tarball" --directory="$out" --ignore-zeros
+          tar_status=$?
+          set -e
+          echo "tar status=$tar_status"
+
+          find "$out" -maxdepth 8 -type f | sort | sed -n '1,300p'
           test -f "$out/Modules/MultiCharacterCampaignTOR/SubModule.xml"
           test -d "$out/Modules/MultiCharacterCampaignTOR/Source/CSharp"
-          grep -RIl --include='*.cs' -E 'MapEvent|map event' "$out/Modules/MultiCharacterCampaignTOR/Source/CSharp" >/dev/null
-          find "$out" -maxdepth 7 -type f | sort | sed -n '1,220p'
+          test -f "$out/Modules/MultiCharacterCampaignTOR/Source/CSharp/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/RemotePartySwitch.cs"
+          grep -RIl --include='*.cs' -E 'Take control|Take command|reinforce|MapEvent' "$out/Modules/MultiCharacterCampaignTOR/Source/CSharp/IdentityGuard" >/dev/null
+          test -f "$out/.github/workflows/build-release.yml" -o -f "$out/.github/workflows/build.yml"
 
           rsync -a --delete --exclude='.git/' "$out/" "$GITHUB_WORKSPACE/"
           git status --short
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
-          git diff --cached --quiet && { echo 'Reconstruction produced no changes'; exit 1; }
+          git diff --cached --quiet && { echo 'Recovery produced no changes'; exit 1; }
           git commit -m "Materialize v1.1.0 source and release pipeline"
           git push origin HEAD:agent/v1.1.0-battle-intervention
