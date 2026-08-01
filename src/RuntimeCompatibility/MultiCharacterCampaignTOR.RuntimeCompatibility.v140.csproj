@@ -5,16 +5,17 @@
     <AssemblyName>MultiCharacterCampaignTOR.WaywatcherFix</AssemblyName>
     <RootNamespace>MultiCharacterCampaignTOR</RootNamespace>
     <PlatformTarget>x64</PlatformTarget>
+    <RecoveredCareerAbilityRepair>$(IntermediateOutputPath)RecoveredCareerAbilityRepair.cs</RecoveredCareerAbilityRepair>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="TaleWorlds.Core"><HintPath>$(BannerlordBin)\TaleWorlds.Core.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="TaleWorlds.MountAndBlade"><HintPath>$(BannerlordBin)\TaleWorlds.MountAndBlade.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="0Harmony"><HintPath>$(RuntimeHarmonyDll)</HintPath><Private>false</Private></Reference>
+    <Compile Remove="MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.cs" />
+    <None Include="MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.cs" />
+    <None Include="MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.tail.csfrag" />
   </ItemGroup>
   <Target Name="AssembleRecoveredCareerAbilityRepair" BeforeTargets="CoreCompile">
-    <PropertyGroup>
-      <RecoveredCareerAbilityRepair>$(IntermediateOutputPath)RecoveredCareerAbilityRepair.cs</RecoveredCareerAbilityRepair>
-    </PropertyGroup>
     <ReadLinesFromFile File="$(MSBuildProjectDirectory)\MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.cs">
       <Output TaskParameter="Lines" ItemName="RecoveredCareerAbilityRepairHead" />
     </ReadLinesFromFile>
@@ -23,7 +24,6 @@
     </ReadLinesFromFile>
     <WriteLinesToFile File="$(RecoveredCareerAbilityRepair)" Lines="@(RecoveredCareerAbilityRepairHead);@(RecoveredCareerAbilityRepairTail)" Overwrite="true" Encoding="UTF-8" />
     <ItemGroup>
-      <Compile Remove="$(MSBuildProjectDirectory)\MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.cs" />
       <Compile Include="$(RecoveredCareerAbilityRepair)" />
     </ItemGroup>
   </Target>
