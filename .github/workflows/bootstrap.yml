@@ -19,7 +19,7 @@ jobs:
           ref: agent/v1.1.0-battle-intervention
           fetch-depth: 0
 
-      - name: Verify baseline and overlay
+      - name: Verify staged baseline and overlay
         shell: bash
         run: |
           set -euo pipefail
@@ -28,8 +28,9 @@ jobs:
           overlay=/tmp/mcc-overlay.tar.xz
 
           actual_baseline="$(sha256sum "$baseline" | awk '{print $1}')"
-          echo "baseline sha256=$actual_baseline"
-          test "$actual_baseline" = "9754b4f446f3d57686655916b6b00f0e3476ec633ac71af459927c3e851ca1af"
+          echo "repository baseline sha256=$actual_baseline"
+          test "$actual_baseline" = "90ba30ff68afa1a64574804488d7e5a8a688c51450b09725ebdc6e48de545960"
+          unzip -t "$baseline"
 
           cat .bootstrap/overlay.tar.xz.b64/part-*.txt | tr -d '\r\n' > "$encoded"
           actual_length="$(wc -c < "$encoded" | tr -d ' ')"
