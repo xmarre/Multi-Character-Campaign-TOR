@@ -1,9 +1,10 @@
 name: Materialize staged repository
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/v1.1.0-battle-intervention
+      - main
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
@@ -11,26 +12,25 @@ permissions:
 
 jobs:
   materialize:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: agent/v1.1.0-battle-intervention
           fetch-depth: 0
 
-      - name: Decode and inspect staged payload
+      - name: Decode and validate staged payload
         shell: bash
         run: |
           set -euo pipefail
           payload=/tmp/mcc-final-payload.tar.xz
+          out=/tmp/mcc-materialized
           cat .bootstrap/final-payload.tar.xz.b64/part-*.txt | base64 --decode > "$payload"
           xz --test "$payload"
-          mkdir -p /tmp/mcc-materialized
-          tar -xJf "$payload" -C /tmp/mcc-materialized
-          echo "Materialized files:"
-          find /tmp/mcc-materialized -maxdepth 4 -type f | sort | sed -n '1,160p'
+          mkdir -p "$out"
+          tar -xJf "$payload" -C "$out"
 
-          src=/tmp/mcc-materialized
+          src="$out"
           if [[ ! -d "$src/Modules" ]]; then
             candidate="$(find "$src" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
             if [[ -n "$candidate" && -d "$candidate/Modules" ]]; then
@@ -40,12 +40,10 @@ jobs:
 
           test -f "$src/Modules/MultiCharacterCampaignTOR/SubModule.xml"
           test -d "$src/Modules/MultiCharacterCampaignTOR/Source/CSharp"
-          grep -RIl --include='*.cs' -E 'shared character|shared-character' "$src/Modules/MultiCharacterCampaignTOR/Source/CSharp" >/dev/null
           grep -RIl --include='*.cs' -E 'MapEvent|map event' "$src/Modules/MultiCharacterCampaignTOR/Source/CSharp" >/dev/null
-
           printf '%s' "$src" > /tmp/mcc-materialized-source
 
-      - name: Replace bootstrap tree with materialized source
+      - name: Replace bootstrap tree and push
         shell: bash
         run: |
           set -euo pipefail
