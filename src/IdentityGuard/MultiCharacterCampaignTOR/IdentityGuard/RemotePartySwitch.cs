@@ -594,7 +594,49 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 				reason = "That defensive battle is no longer active.";
 				return false;
 			}
-			return CanUseRemoteParty(behavior, target, false, expectedMapEvent, out reason);
+			if (!CanUseRemoteParty(behavior, target, false, expectedMapEvent, out reason))
+			{
+				return false;
+			}
+			return CanContinueBattleAsPlayer(expectedMapEvent, out reason);
+		}
+
+		private static bool CanContinueBattleAsPlayer(object expectedMapEvent, out string reason)
+		{
+			reason = string.Empty;
+			try
+			{
+				if (expectedMapEvent == null)
+				{
+					reason = "The defensive battle is no longer active.";
+					return false;
+				}
+				object defenderParty = GetSideLeaderParty(GetMember(expectedMapEvent, "DefenderSide"));
+				object attackerParty = GetSideLeaderParty(GetMember(expectedMapEvent, "AttackerSide"));
+				if (defenderParty == null || attackerParty == null)
+				{
+					reason = "Bannerlord did not expose both battle-side leader parties.";
+					return false;
+				}
+				Type encounterType = RequireType("TaleWorlds.CampaignSystem.Encounters.PlayerEncounter, TaleWorlds.CampaignSystem");
+				MethodInfo restart = RequireMethod(encounterType, "RestartPlayerEncounter", 3, StaticFlags);
+				ParameterInfo[] parameters = restart.GetParameters();
+				if (parameters.Length != 3 || parameters[2].ParameterType != typeof(bool))
+				{
+					reason = "Bannerlord's player-encounter restart signature is incompatible.";
+					return false;
+				}
+				RequireMethod(encounterType, "Init", 0, StaticFlags);
+				RequireMethod(encounterType, "Start", 0, StaticFlags);
+				return true;
+			}
+			catch (Exception ex)
+			{
+				Exception unwrapped = Unwrap(ex);
+				reason = unwrapped.Message;
+				LogError("[BattleIntervention] Native player-encounter API validation failed", unwrapped);
+				return false;
+			}
 		}
 
 		internal static bool TakeControlForBattle(Hero target, object expectedMapEvent, out string reason)
@@ -702,8 +744,12 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			reason = string.Empty;
 			try
 			{
+				if (!CanContinueBattleAsPlayer(expectedMapEvent, out reason))
+				{
+					return false;
+				}
 				MobileParty mainParty = MobileParty.MainParty;
-				if (mainParty == null || expectedMapEvent == null || GetEffectiveMapEvent(mainParty) != expectedMapEvent)
+				if (mainParty == null || GetEffectiveMapEvent(mainParty) != expectedMapEvent)
 				{
 					reason = "The controlled party is no longer in the expected battle.";
 					return false;
@@ -1060,6 +1106,23 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			{
 				Exception ex2 = Unwrap(ex);
 				LogError("[RemotePartySwitch] Remote switch failed", ex2);
+				if (flag && !flag2 && Hero.MainHero == target && MobileParty.MainParty == mainParty && mainHero != null && mainHero.IsAlive)
+				{
+					try
+					{
+						SetPlayerTroop(mainHero);
+						if (Hero.MainHero != mainHero || MobileParty.MainParty != mainParty)
+						{
+							throw new InvalidOperationException("Pre-handoff rollback did not restore the original MainHero/MainParty pair.");
+						}
+						flag = false;
+						LogInfo("[RemotePartySwitch] Rolled back PlayerTroop after campaign party rebinding failed before commit.");
+					}
+					catch (Exception rollbackException)
+					{
+						LogError("[RemotePartySwitch] Pre-handoff PlayerTroop rollback failed", Unwrap(rollbackException));
+					}
+				}
 				if (flag && (flag2 || (Hero.MainHero == target && MobileParty.MainParty == partyBelongedTo)))
 				{
 					try

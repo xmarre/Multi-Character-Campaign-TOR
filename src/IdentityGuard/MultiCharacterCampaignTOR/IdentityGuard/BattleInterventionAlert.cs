@@ -65,6 +65,7 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 		private static readonly HashSet<object> SuppressedEvents = new HashSet<object>(ReferenceComparer.Instance);
 
 		private static bool _installed;
+		private static Campaign _campaign;
 		private static bool _inquiryOpen;
 		private static object _pendingEncounterEvent;
 		private static int _encounterDelayTicks;
@@ -99,7 +100,7 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 
 		internal static void Tick()
 		{
-			if (!_installed || Campaign.Current == null)
+			if (!_installed || !EnsureCampaignState())
 			{
 				return;
 			}
@@ -129,7 +130,7 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 
 		private static void AfterMapEventStarted(object __0)
 		{
-			if (__0 != null)
+			if (__0 != null && EnsureCampaignState())
 			{
 				StartedEvents.Enqueue(__0);
 			}
@@ -143,6 +144,23 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			}
 			ProcessedEvents.Remove(__0);
 			SuppressedEvents.Remove(__0);
+		}
+
+		private static bool EnsureCampaignState()
+		{
+			Campaign current = Campaign.Current;
+			if (!object.ReferenceEquals(_campaign, current))
+			{
+				StartedEvents.Clear();
+				Candidates.Clear();
+				ProcessedEvents.Clear();
+				SuppressedEvents.Clear();
+				_inquiryOpen = false;
+				_pendingEncounterEvent = null;
+				_encounterDelayTicks = 0;
+				_campaign = current;
+			}
+			return current != null;
 		}
 
 		private static void ProcessStartedEvents()
