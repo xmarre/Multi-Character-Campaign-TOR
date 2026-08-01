@@ -4,6 +4,8 @@ Released: 1 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
+Validated source merge: `f9373e59140d150105fbdc2ec2622602e77b98d2`.
+
 ## Fixed: battle takeover lifecycle
 
 - Fixed taking control of a shared character's engaged party leaving Bannerlord with an incomplete player encounter.
