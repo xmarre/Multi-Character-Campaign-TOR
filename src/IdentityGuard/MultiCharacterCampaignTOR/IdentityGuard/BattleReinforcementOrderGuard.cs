@@ -137,13 +137,14 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 
 		private static void TickOrder(ActiveOrder order, float elapsed)
 		{
-			if (order == null || !Orders.ContainsKey(order.Party))
+			ActiveOrder currentOrder;
+			if (order == null || order.Party == null || !Orders.TryGetValue(order.Party, out currentOrder) || !object.ReferenceEquals(currentOrder, order))
 			{
 				return;
 			}
 			MobileParty party = order.Party;
 			MobileParty target = order.TargetParty;
-			if (party == null || !party.IsActive)
+			if (!party.IsActive)
 			{
 				CancelOrder(party, false, false, "reinforcing party became inactive");
 				return;
@@ -167,11 +168,15 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 				return;
 			}
 
+			order.InteractionRetryDelay = Math.Max(0f, order.InteractionRetryDelay - elapsed);
+			float interactionDistance = GetInteractionDistance();
+			bool withinInteractionDistance = party.Position.DistanceSquared(target.Position) <= interactionDistance * interactionDistance;
 			bool playerControlled = object.ReferenceEquals(party, MobileParty.MainParty);
+
 			if (playerControlled)
 			{
 				ReleaseAiDecisionLock(order);
-				if (party.DefaultBehavior != AiBehavior.GoToPoint || party.MoveTargetPoint.DistanceSquared(order.Destination) > 0.01f)
+				if (!withinInteractionDistance && (party.DefaultBehavior != AiBehavior.GoToPoint || party.MoveTargetPoint.DistanceSquared(order.Destination) > 0.01f))
 				{
 					CancelOrder(party, false, false, "player replaced the reinforcement movement order");
 					return;
@@ -182,26 +187,14 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 				EnsureAiDecisionLock(order);
 				CampaignVec2 currentDestination = target.Position;
 				bool destinationMoved = currentDestination.DistanceSquared(order.Destination) > 0.04f;
-				if (destinationMoved || party.DefaultBehavior != AiBehavior.GoToPoint || party.MoveTargetPoint.DistanceSquared(order.Destination) > 0.01f)
+				if (!withinInteractionDistance && (destinationMoved || party.DefaultBehavior != AiBehavior.GoToPoint || party.MoveTargetPoint.DistanceSquared(order.Destination) > 0.01f))
 				{
 					order.Destination = currentDestination;
 					IssueBattleSiteRoute(order, false);
 				}
 			}
 
-			order.InteractionRetryDelay = Math.Max(0f, order.InteractionRetryDelay - elapsed);
-			float interactionDistance = 0.35f;
-			try
-			{
-				if (Campaign.Current != null && Campaign.Current.Models != null && Campaign.Current.Models.EncounterModel != null)
-				{
-					interactionDistance = Math.Max(0.1f, Campaign.Current.Models.EncounterModel.NeededMaximumDistanceForEncounteringMobileParty * 1.05f);
-				}
-			}
-			catch
-			{
-			}
-			if (party.Position.DistanceSquared(target.Position) > interactionDistance * interactionDistance || order.InteractionRetryDelay > 0f)
+			if (!withinInteractionDistance || order.InteractionRetryDelay > 0f)
 			{
 				return;
 			}
@@ -210,6 +203,10 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			try
 			{
 				target.OnPartyInteraction(party);
+				if (!Orders.TryGetValue(party, out currentOrder) || !object.ReferenceEquals(currentOrder, order))
+				{
+					return;
+				}
 				if (object.ReferenceEquals(RemotePartySwitch.GetEffectiveMapEvent(party), order.MapEvent) || (playerControlled && PlayerEncounter.IsActive))
 				{
 					CompleteOrder(order, "native arrival interaction started the selected battle encounter");
@@ -223,6 +220,22 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			{
 				RemotePartySwitch.Error("[BattleReinforcementOrderGuard] Native battle-site interaction failed; the order remains active for a guarded retry", Unwrap(ex));
 			}
+		}
+
+		private static float GetInteractionDistance()
+		{
+			float interactionDistance = 0.35f;
+			try
+			{
+				if (Campaign.Current != null && Campaign.Current.Models != null && Campaign.Current.Models.EncounterModel != null)
+				{
+					interactionDistance = Math.Max(0.1f, Campaign.Current.Models.EncounterModel.NeededMaximumDistanceForEncounteringMobileParty * 1.05f);
+				}
+			}
+			catch
+			{
+			}
+			return interactionDistance;
 		}
 
 		private static void IssueBattleSiteRoute(ActiveOrder order, bool initial)
@@ -276,7 +289,12 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 
 		private static void CompleteOrder(ActiveOrder order, string reason)
 		{
-			if (order == null)
+			if (order == null || order.Party == null)
+			{
+				return;
+			}
+			ActiveOrder currentOrder;
+			if (!Orders.TryGetValue(order.Party, out currentOrder) || !object.ReferenceEquals(currentOrder, order))
 			{
 				return;
 			}
