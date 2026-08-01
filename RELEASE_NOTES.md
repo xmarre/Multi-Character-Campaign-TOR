@@ -1,39 +1,33 @@
-# Multi-Character Campaign - TOR v1.1.1
+# Multi-Character Campaign - TOR v1.1.2
 
 Released: 1 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
-Validated source merge: `8bacb5dd9f3c234a5449d87ef228664d0178e1ce`.
+## Fixed: battle takeover lifecycle
 
-## Fixed: excessive Caravan and Party Income
+- Fixed taking control of a shared character's engaged party leaving Bannerlord with an incomplete player encounter.
+- Version 1.1.1 used the low-level `PlayerEncounter.RestartPlayerEncounter` method. That method creates the encounter object and assigns the parties, but it does not run the native initialization that joins the player to the existing map event, opens the encounter menu, and establishes the normal cleanup lifecycle.
+- Version 1.1.2 uses `EncounterManager.RestartPlayerEncounter(attackerParty, defenderParty)`, the high-level Bannerlord entry point used by ordinary campaign-map encounters.
+- After the switch completes, the native attack/fight encounter window opens automatically on the next application tick. No additional click on the enemy party is required.
+- Completing or leaving the battle now follows Bannerlord's normal encounter lifecycle, so the newly controlled party is not left unable to initiate later attacks.
 
-- Fixed remote shared-character parties receiving a copy of the active player's complete shared denar balance.
-- Bannerlord interpreted that copied wallet as party surplus and transferred 20% of everything above its 10,000-denar reserve into `Caravan and Party Income`. With 1,180,981 denars, this produced the reported 234,196-denar phantom income.
-- Remote shared-character party leaders now retain an independent party treasury while the currently controlled character continues using the shared player wallet.
-- Existing v1.1.0 saves with a clearly mirrored remote-party wallet are normalized to a 10,000-denar party reserve on the first synchronization after loading.
-- A second narrowly scoped finance guard prevents Bannerlord from collecting a still-mirrored shared wallet before that normalization occurs.
-- Normal mercenary contract pay, workshop income, caravan income, legitimate party profits, wages, and garrison expenses remain native.
+## Added: combined takeover and reinforcement
 
-The mod does not remove denars already credited by the bug. Those funds cannot be distinguished safely from money earned or spent after the daily calculation.
+- The battle alert now allows **Take control** and **Send the current party to reinforce** to be selected together.
+- When both are selected, the original MainParty is captured before the switch, transferred to AI control, and ordered toward the selected battle after the switch transaction finishes.
+- The reinforcement order is applied after the outgoing-party handoff sets its normal temporary hold state, preventing that handoff from erasing the order.
+- Bannerlord 1.3.15's actual `SetMoveEngageParty(MobileParty, NavigationType)` signature is used with `NavigationType.Default`.
+- The outgoing AI party's immediate behavior refresh is cleared after the engage order so the selected target remains authoritative.
 
-## Fixed: shared characters joining existing battles
+## Unchanged
 
-- Added an event-driven hook for `OnPartyAddedToMapEvent`, covering shared-character parties that reinforce an AI battle after it has already started.
-- Battle intervention now recognizes a registered shared character on either the attacker or defender side.
-- A helper party temporarily attached to an AI battle-side leader can become the player MainParty for the exact active battle after the existing ownership, encounter, settlement, transition, siege, and current-party safety checks pass.
-- The existing intervention inquiry can then transfer control and reopen the same native `PlayerEncounter`.
-- Stale or unrelated battles remain blocked.
-
-## Performance and compatibility
-
-- No recurring campaign-party scan, global hero scan, or save migration behavior was added.
-- Finance repair runs only at the existing shared-gold synchronization and native party-income boundaries.
-- Late battle detection runs only when Bannerlord adds a party to a map event.
-- No new serialized MCC save keys were added.
+- The v1.1.1 independent-party treasury and excessive `Caravan and Party Income` fixes remain active.
+- No recurring campaign-party scan, global hero scan, new serialized save key, or save migration was added.
 
 ## Validation
 
 - Complete six-project Release build against Bannerlord 1.3.15 reference assemblies.
-- CI validates `DefaultClanFinanceModel.AddIncomeFromParty`, `CampaignEventDispatcher.OnPartyAddedToMapEvent`, map-event lifecycle methods, and the native `PlayerEncounter` continuation methods.
-- The live takeover path cannot be executed inside a running Bannerlord campaign in CI. Keep a backup save and use a new save slot for the first test.
+- CI verifies the high-level `EncounterManager.RestartPlayerEncounter(PartyBase attackerParty, PartyBase defenderParty)` API.
+- CI verifies the two-parameter `MobileParty.SetMoveEngageParty(MobileParty party, NavigationType navigationType)` API and the `NavigationType.Default` enum value.
+- The live encounter menu, battle completion, and AI reinforcement arrival require an in-game campaign test. Keep a backup save and use a new save slot for the first test.
