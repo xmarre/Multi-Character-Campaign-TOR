@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -380,10 +379,10 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 				throw new MissingMemberException(alertType.FullName, "Candidate");
 			}
 			_candidateConstructor = _candidateType.GetConstructors(InstanceFlags).Single((ConstructorInfo constructor) => constructor.GetParameters().Length == 3);
-			_candidateQueueField = alertType.GetField("CandidateQueue", StaticFlags);
+			_candidateQueueField = alertType.GetField("Candidates", StaticFlags);
 			if (_candidateQueueField == null)
 			{
-				throw new MissingFieldException(alertType.FullName, "CandidateQueue");
+				throw new MissingFieldException(alertType.FullName, "Candidates");
 			}
 		}
 
