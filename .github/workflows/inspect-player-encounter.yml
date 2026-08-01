@@ -1,0 +1,31 @@
+name: Inspect Bannerlord encounter flow
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore Bannerlord references
+        shell: pwsh
+        run: dotnet restore src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj
+      - name: Resolve Bannerlord reference directory
+        shell: pwsh
+        run: |
+          $campaign = Get-ChildItem "$env:USERPROFILE\.nuget\packages" -Recurse -Filter TaleWorlds.CampaignSystem.dll | Select-Object -First 1
+          if (-not $campaign) { throw 'Bannerlord reference assemblies were not restored.' }
+          "BANNERLORD_BIN=$($campaign.Directory.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "CAMPAIGN_DLL=$($campaign.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Disassemble PlayerEncounter and list encounter menu APIs
+        shell: powershell
+        run: .\scripts\inspect_player_encounter.ps1 -CampaignDll "$env:CAMPAIGN_DLL" -BannerlordBin "$env:BANNERLORD_BIN"
