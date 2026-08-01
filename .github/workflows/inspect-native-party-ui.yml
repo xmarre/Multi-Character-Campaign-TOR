@@ -19,7 +19,7 @@ jobs:
       - name: Restore Bannerlord references
         shell: pwsh
         run: dotnet restore src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj
-      - name: Inspect exact tooltip and menu APIs
+      - name: Resolve native hint tooltip call chain
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -40,29 +40,90 @@ jobs:
               $assemblies[$asm.GetName().Name] = $asm
             } catch {}
           }
-          $flags = [System.Reflection.BindingFlags]'Public,NonPublic,Instance,Static'
-          function Print-Type([string]$assemblyName, [string]$typeName, [string]$methodFilter) {
-            $asm = $assemblies[$assemblyName]
-            if (-not $asm) { Write-Host "MISSING ASSEMBLY $assemblyName"; return }
-            $type = $asm.GetType($typeName, $false)
-            if (-not $type) { Write-Host "MISSING TYPE $assemblyName :: $typeName"; return }
-            Write-Host "===== $assemblyName :: $typeName ====="
-            foreach ($property in $type.GetProperties($flags)) {
-              if (-not $methodFilter -or $property.Name -match $methodFilter) {
-                Write-Host "PROPERTY $($property.PropertyType.FullName) $($property.Name) get=$($property.CanRead) set=$($property.CanWrite)"
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Collections.Generic;
+          using System.Reflection;
+          using System.Reflection.Emit;
+          public static class ILCallDumper
+          {
+              private static readonly Dictionary<short, OpCode> Codes = BuildCodes();
+              private static Dictionary<short, OpCode> BuildCodes()
+              {
+                  var result = new Dictionary<short, OpCode>();
+                  foreach (var field in typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static))
+                  {
+                      if (field.FieldType == typeof(OpCode))
+                      {
+                          var opcode = (OpCode)field.GetValue(null);
+                          result[opcode.Value] = opcode;
+                      }
+                  }
+                  return result;
               }
-            }
-            foreach ($method in $type.GetMethods($flags) | Where-Object { $_.DeclaringType -eq $type }) {
-              if ($methodFilter -and $method.Name -notmatch $methodFilter) { continue }
-              $params = ($method.GetParameters() | ForEach-Object { "$($_.ParameterType.FullName) $($_.Name)" }) -join ', '
-              Write-Host "METHOD $($method.ReturnType.FullName) $($method.Name)($params) static=$($method.IsStatic)"
-            }
+              public static void Dump(MethodBase method)
+              {
+                  Console.WriteLine("===== IL CALLS " + method.DeclaringType.FullName + "." + method.Name + " =====");
+                  var body = method.GetMethodBody();
+                  if (body == null) { Console.WriteLine("NO BODY"); return; }
+                  var bytes = body.GetILAsByteArray();
+                  int index = 0;
+                  while (index < bytes.Length)
+                  {
+                      int offset = index;
+                      short value = bytes[index++];
+                      if (value == 0xFE) value = (short)(0xFE00 | bytes[index++]);
+                      OpCode opcode;
+                      if (!Codes.TryGetValue(value, out opcode)) throw new InvalidOperationException("Unknown opcode at " + offset);
+                      int token = 0;
+                      switch (opcode.OperandType)
+                      {
+                          case OperandType.InlineNone: break;
+                          case OperandType.ShortInlineBrTarget:
+                          case OperandType.ShortInlineI:
+                          case OperandType.ShortInlineVar: index += 1; break;
+                          case OperandType.InlineVar: index += 2; break;
+                          case OperandType.InlineI:
+                          case OperandType.InlineBrTarget:
+                          case OperandType.ShortInlineR:
+                          case OperandType.InlineField:
+                          case OperandType.InlineMethod:
+                          case OperandType.InlineSig:
+                          case OperandType.InlineString:
+                          case OperandType.InlineTok:
+                          case OperandType.InlineType:
+                              token = BitConverter.ToInt32(bytes, index); index += 4; break;
+                          case OperandType.InlineI8:
+                          case OperandType.InlineR: index += 8; break;
+                          case OperandType.InlineSwitch:
+                              int count = BitConverter.ToInt32(bytes, index); index += 4 + count * 4; break;
+                          default: throw new InvalidOperationException("Unhandled operand " + opcode.OperandType);
+                      }
+                      if (opcode.OperandType == OperandType.InlineMethod || opcode.OperandType == OperandType.InlineField || opcode.OperandType == OperandType.InlineType || opcode.OperandType == OperandType.InlineTok)
+                      {
+                          try
+                          {
+                              var member = method.Module.ResolveMember(token, method.DeclaringType == null ? null : method.DeclaringType.GetGenericArguments(), method.IsGenericMethod ? method.GetGenericArguments() : null);
+                              Console.WriteLine(offset.ToString("X4") + " " + opcode.Name + " -> " + member.DeclaringType.FullName + "." + member.Name + " :: " + member);
+                          }
+                          catch (Exception ex)
+                          {
+                              Console.WriteLine(offset.ToString("X4") + " " + opcode.Name + " token=0x" + token.ToString("X8") + " resolve failed: " + ex.Message);
+                          }
+                      }
+                  }
+              }
           }
-          Print-Type 'TaleWorlds.Core' 'TaleWorlds.Core.InformationManager' 'Tooltip|Inquiry|Hint'
-          Print-Type 'TaleWorlds.Core' 'TaleWorlds.Core.MBInformationManager' 'Tooltip|Inquiry|Hint'
-          Print-Type 'TaleWorlds.CampaignSystem' 'TaleWorlds.CampaignSystem.GameMenus.GameMenu' 'SwitchToMenu|ExitToLast|StringId|Current'
-          Print-Type 'TaleWorlds.CampaignSystem' 'TaleWorlds.CampaignSystem.GameMenus.GameMenuManager' 'LastGameMenu|Current|Menu'
-          Print-Type 'TaleWorlds.CampaignSystem' 'TaleWorlds.CampaignSystem.Campaign' 'CurrentMenuContext|GameMenuManager|Current'
-          Print-Type 'TaleWorlds.CampaignSystem' 'TaleWorlds.CampaignSystem.GameMenus.MenuContext' 'GameMenu|Current'
-          Print-Type 'TaleWorlds.Core.ViewModelCollection' 'TaleWorlds.Core.ViewModelCollection.Information.HintViewModel' 'ExecuteBeginHint|ExecuteEndHint'
-          Print-Type 'TaleWorlds.CampaignSystem.ViewModelCollection' 'TaleWorlds.CampaignSystem.ViewModelCollection.TooltipRefresherCollection' 'RefreshMapEventTooltip|AddEncounterParties'
+          '@
+          $flags = [System.Reflection.BindingFlags]'Public,NonPublic,Instance,Static'
+          function Dump-Method([string]$assemblyName, [string]$typeName, [string]$methodName) {
+            $type = $assemblies[$assemblyName].GetType($typeName, $true)
+            $method = $type.GetMethods($flags) | Where-Object { $_.Name -eq $methodName } | Select-Object -First 1
+            if (-not $method) { throw "Missing $typeName.$methodName" }
+            [ILCallDumper]::Dump($method)
+          }
+          Dump-Method 'TaleWorlds.Core.ViewModelCollection' 'TaleWorlds.Core.ViewModelCollection.Information.HintViewModel' 'ExecuteBeginHint'
+          Dump-Method 'TaleWorlds.Core.ViewModelCollection' 'TaleWorlds.Core.ViewModelCollection.Information.HintViewModel' 'ExecuteEndHint'
+          Dump-Method 'TaleWorlds.Core.ViewModelCollection' 'TaleWorlds.Core.ViewModelCollection.Information.BasicTooltipViewModel' 'ExecuteBeginHint'
+          Dump-Method 'TaleWorlds.Core.ViewModelCollection' 'TaleWorlds.Core.ViewModelCollection.Information.BasicTooltipViewModel' 'ExecuteEndHint'
+          Dump-Method 'TaleWorlds.CampaignSystem.ViewModelCollection' 'TaleWorlds.CampaignSystem.ViewModelCollection.GameMenu.Recruitment.RecruitVolunteerTroopVM' 'ExecuteBeginHint'
