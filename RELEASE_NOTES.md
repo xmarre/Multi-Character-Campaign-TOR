@@ -4,6 +4,8 @@ Released: 1 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
+Validated source merge: `5f13ddbc4843afd184f57e373777a515aadb3182`.
+
 ## Fixed: unusable battle intervention alert
 
 - Version 1.2.0 placed a full custom troop roster inside the multi-selection inquiry body. In sufficiently varied TOR battles, that text consumed the inquiry layout and pushed the two selectable action rows out of the usable window.
