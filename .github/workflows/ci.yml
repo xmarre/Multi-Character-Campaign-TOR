@@ -45,7 +45,7 @@ jobs:
           dotnet restore src/MultiCharacterCampaignTOR.CSharp.sln -p:BannerlordBin="$env:BANNERLORD_BIN" -p:HarmonyDll="$env:HARMONY_DLL" -p:RuntimeHarmonyDll="$env:HARMONY_DLL"
           dotnet build src/MultiCharacterCampaignTOR.CSharp.sln -c Release --no-restore -p:BannerlordBin="$env:BANNERLORD_BIN" -p:HarmonyDll="$env:HARMONY_DLL" -p:RuntimeHarmonyDll="$env:HARMONY_DLL"
 
-      - name: Inspect Bannerlord 1.3.15 finance and battle APIs
+      - name: Inspect Bannerlord 1.3.15 finance, encounter, prediction, and roster APIs
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -67,9 +67,14 @@ jobs:
             @('TaleWorlds.CampaignSystem.GameComponents.DefaultClanFinanceModel','AddIncomeFromParty',4),
             @('TaleWorlds.CampaignSystem.EncounterManager','RestartPlayerEncounter',2),
             @('TaleWorlds.CampaignSystem.Encounters.PlayerEncounter','RestartPlayerEncounter',3),
-            @('TaleWorlds.CampaignSystem.Encounters.PlayerEncounter','Init',0),
-            @('TaleWorlds.CampaignSystem.Encounters.PlayerEncounter','Start',0),
-            @('TaleWorlds.CampaignSystem.Party.MobileParty','SetMoveEngageParty',2)
+            @('TaleWorlds.CampaignSystem.Party.MobileParty','SetMoveEngageParty',2),
+            @('TaleWorlds.CampaignSystem.MapEvents.MapEvent','GetStrengthsRelativeToParty',3),
+            @('TaleWorlds.CampaignSystem.MapEvents.MapEvent','GetOtherSide',1),
+            @('TaleWorlds.CampaignSystem.MapEvents.MapEvent','PartiesOnSide',1),
+            @('TaleWorlds.CampaignSystem.Roster.TroopRoster','GetCharacterAtIndex',1),
+            @('TaleWorlds.CampaignSystem.Roster.TroopRoster','GetElementNumber',1),
+            @('TaleWorlds.CampaignSystem.Roster.TroopRoster','GetElementWoundedNumber',1),
+            @('TaleWorlds.CampaignSystem.CharacterObject','GetFormationClass',0)
           )) {
             $type = $asm.GetType($spec[0], $true)
             $methods = @($type.GetMethods($flags) | Where-Object { $_.Name -eq $spec[1] -and $_.GetParameters().Length -eq $spec[2] })
@@ -83,8 +88,17 @@ jobs:
           $engage = @($mobileParty.GetMethods($flags) | Where-Object { $_.Name -eq 'SetMoveEngageParty' -and $_.GetParameters().Length -eq 2 })
           if ($engage.Count -ne 1) { throw "Expected one SetMoveEngageParty(MobileParty, NavigationType), found $($engage.Count)." }
           $navigationType = $engage[0].GetParameters()[1].ParameterType
-          if (-not $navigationType.IsEnum -or -not [Enum]::IsDefined($navigationType, 'Default')) {
-            throw 'SetMoveEngageParty does not expose the expected NavigationType.Default value.'
+          if (-not $navigationType.IsEnum -or -not [Enum]::IsDefined($navigationType, 'Default')) { throw 'SetMoveEngageParty does not expose NavigationType.Default.' }
+          $mapEvent = $asm.GetType('TaleWorlds.CampaignSystem.MapEvents.MapEvent', $true)
+          $strength = @($mapEvent.GetMethods($flags) | Where-Object { $_.Name -eq 'GetStrengthsRelativeToParty' -and $_.GetParameters().Length -eq 3 })
+          if ($strength.Count -ne 1 -or -not $strength[0].GetParameters()[1].ParameterType.IsByRef -or -not $strength[0].GetParameters()[2].ParameterType.IsByRef) { throw 'Native side-relative strength API has an unexpected signature.' }
+          $partyBase = $asm.GetType('TaleWorlds.CampaignSystem.Party.PartyBase', $true)
+          foreach ($property in @('Side','MemberRoster','NumberOfHealthyMembers','NumberOfWoundedTotalMembers','EstimatedStrength')) {
+            if (-not $partyBase.GetProperty($property, $flags)) { throw "Missing PartyBase.$property" }
+          }
+          $character = $asm.GetType('TaleWorlds.CampaignSystem.CharacterObject', $true)
+          foreach ($property in @('StringId','Name','Tier')) {
+            if (-not $character.GetProperty($property, $flags)) { throw "Missing CharacterObject.$property" }
           }
 
       - name: Inspect MCC runtime patch surfaces
@@ -95,20 +109,30 @@ jobs:
           foreach ($surface in @('BeforeSynchronizeGold','AfterSynchronizeGold','BeforeAddIncomeFromParty','BeforeIsDefenderInMapEvent','AfterCanUseRemoteParty','AfterPartyAddedToMapEvent')) {
             if ($shared -notmatch [regex]::Escape($surface)) { throw "Missing runtime patch surface $surface" }
           }
-          $safety = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleTakeoverSafetyGuard.cs' -Raw
-          if ($safety -notmatch 'AfterCanUseRemoteParty') { throw 'Missing final battle takeover safety postfix.' }
           $flow = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleInterventionFlowFix.cs' -Raw
-          foreach ($surface in @('BeforeShowInquiry','BeforeContinueBattleAsPlayer','CanOrderPartyToBattle','OrderPartyToBattle','EncounterManager','RestartPlayerEncounter','SetMoveEngageParty','NavigationType','DefaultBehaviorNeedsUpdate')) {
-            if ($flow -notmatch [regex]::Escape($surface)) { throw "Missing battle-intervention flow surface $surface" }
+          foreach ($surface in @('BeforeShowInquiry','BeforeContinueBattleAsPlayer','HandleSelection','CanOrderPartyToBattle','EncounterManager','SetMoveEngageParty')) {
+            if ($flow -notmatch [regex]::Escape($surface)) { throw "Missing validated battle-flow surface $surface" }
+          }
+          $settings = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleInterventionSettings.cs' -Raw
+          foreach ($surface in @('tor_shared_campaign_alert_predicted_losses_only','AfterSyncData','AfterRegisterMenus','PredictedLossesOnly')) {
+            if ($settings -notmatch [regex]::Escape($surface)) { throw "Missing battle-alert setting surface $surface" }
+          }
+          $prediction = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleInterventionPrediction.cs' -Raw
+          foreach ($surface in @('GetStrengthsRelativeToParty','PartiesOnSide','PredictedLoss','FormationCounts','GetElementWoundedNumber','AfterPartyAddedToMapEvent','ShowPredictionInquiry')) {
+            if ($prediction -notmatch [regex]::Escape($surface)) { throw "Missing prediction/composition surface $surface" }
+          }
+          $bridge = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleInterventionPredictionPriorityBridge.cs' -Raw
+          foreach ($surface in @('BattleInterventionAlert','ShowInquiry','BeforeShowInquiry','priority.SetValue(harmonyPrefix, 800)')) {
+            if ($bridge -notmatch [regex]::Escape($surface)) { throw "Missing priority bridge surface $surface" }
           }
           $submodule = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/SubModule.cs' -Raw
-          foreach ($installer in @('RuntimeIdentityGuard.Install()','SharedPartyRuntimeFixes.Install()','BattleTakeoverSafetyGuard.Install()','BattleInterventionFlowFix.Install()')) {
+          foreach ($installer in @('RuntimeIdentityGuard.Install()','SharedPartyRuntimeFixes.Install()','BattleTakeoverSafetyGuard.Install()','BattleInterventionFlowFix.Install()','BattleInterventionSettings.Install()','BattleInterventionPrediction.Install()','BattleInterventionPredictionPriorityBridge.Install()')) {
             if ($submodule -notmatch [regex]::Escape($installer)) { throw "Missing installer $installer" }
           }
           $assemblyInfo = Get-Content 'src/IdentityGuard/Properties/AssemblyInfo.cs' -Raw
-          if ($assemblyInfo -notmatch 'AssemblyVersion\("1\.1\.2\.0"\)') { throw 'IdentityGuard assembly version is not 1.1.2.0.' }
+          if ($assemblyInfo -notmatch 'AssemblyVersion\("1\.2\.0\.0"\)') { throw 'IdentityGuard assembly version is not 1.2.0.0.' }
           $manifest = Get-Content 'module/SubModule.xml' -Raw
-          if ($manifest -notmatch '<Version value="v1\.1\.2"') { throw 'Module manifest is not v1.1.2.' }
+          if ($manifest -notmatch '<Version value="v1\.2\.0"') { throw 'Module manifest is not v1.2.0.' }
 
       - name: Inventory required outputs
         shell: pwsh
@@ -128,7 +152,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: full-module-v1.1.2
+          name: full-module-v1.2.0
           path: |
             src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll
             src/NativeCreation/bin/Release/MultiCharacterCampaignTOR.NativeCreation.dll
