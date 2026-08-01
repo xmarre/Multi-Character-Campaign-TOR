@@ -13,6 +13,7 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			base.OnSubModuleLoad();
 			RuntimeIdentityGuard.Install();
 			SharedPartyRuntimeFixes.Install();
+			BattleTakeoverSafetyGuard.Install();
 		}
 
 		protected override void OnApplicationTick(float dt)
