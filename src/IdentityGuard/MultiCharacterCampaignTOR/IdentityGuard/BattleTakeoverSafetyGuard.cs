@@ -10,6 +10,7 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 	{
 		private const BindingFlags InstanceFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 		private const BindingFlags StaticFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+		private const int HarmonyPriorityLast = 0;
 
 		private static bool _installed;
 		private static MethodInfo _partyInSiegeOrRaid;
@@ -102,8 +103,15 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			MethodInfo patch = harmonyType.GetMethods(BindingFlags.Instance | BindingFlags.Public).First((MethodInfo method) => method.Name == "Patch" && method.GetParameters().Length >= 3);
 			ParameterInfo[] parameters = patch.GetParameters();
 			object[] arguments = new object[parameters.Length];
+			object harmonyMethod = Activator.CreateInstance(harmonyMethodType, postfix);
+			FieldInfo priorityField = harmonyMethodType.GetField("priority", InstanceFlags);
+			if (priorityField == null)
+			{
+				throw new MissingFieldException(harmonyMethodType.FullName, "priority");
+			}
+			priorityField.SetValue(harmonyMethod, HarmonyPriorityLast);
 			arguments[0] = original;
-			arguments[2] = Activator.CreateInstance(harmonyMethodType, postfix);
+			arguments[2] = harmonyMethod;
 			patch.Invoke(harmony, arguments);
 		}
 
