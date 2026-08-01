@@ -1,13 +1,60 @@
-name: Bootstrap repository and validate
+name: Materialize staged repository
 
 on:
+  push:
+    branches:
+      - agent/v1.1.0-battle-intervention
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  bootstrap-and-build:
-    runs-on: windows-latest
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
     steps:
-      - run: Write-Host "Bootstrap payload upload in progress"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decode and inspect staged payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload=/tmp/mcc-final-payload.tar.xz
+          cat .bootstrap/final-payload.tar.xz.b64/part-*.txt | base64 --decode > "$payload"
+          xz --test "$payload"
+          mkdir -p /tmp/mcc-materialized
+          tar -xJf "$payload" -C /tmp/mcc-materialized
+          echo "Materialized files:"
+          find /tmp/mcc-materialized -maxdepth 4 -type f | sort | sed -n '1,160p'
+
+          src=/tmp/mcc-materialized
+          if [[ ! -d "$src/Modules" ]]; then
+            candidate="$(find "$src" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+            if [[ -n "$candidate" && -d "$candidate/Modules" ]]; then
+              src="$candidate"
+            fi
+          fi
+
+          test -f "$src/Modules/MultiCharacterCampaignTOR/SubModule.xml"
+          test -d "$src/Modules/MultiCharacterCampaignTOR/Source/CSharp"
+          grep -RIl --include='*.cs' -E 'shared character|shared-character' "$src/Modules/MultiCharacterCampaignTOR/Source/CSharp" >/dev/null
+          grep -RIl --include='*.cs' -E 'MapEvent|map event' "$src/Modules/MultiCharacterCampaignTOR/Source/CSharp" >/dev/null
+
+          printf '%s' "$src" > /tmp/mcc-materialized-source
+
+      - name: Replace bootstrap tree with materialized source
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$(cat /tmp/mcc-materialized-source)"
+          rsync -a --delete --exclude='.git/' "$src/" "$GITHUB_WORKSPACE/"
+          git status --short
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet && { echo 'Payload produced no changes'; exit 1; }
+          git commit -m "Materialize v1.1.0 source and release pipeline"
+          git push origin HEAD:agent/v1.1.0-battle-intervention
