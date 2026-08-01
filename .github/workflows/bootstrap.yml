@@ -19,40 +19,40 @@ jobs:
           ref: agent/v1.1.0-battle-intervention
           fetch-depth: 0
 
-      - name: Decode and validate staged payload
+      - name: Verify baseline and overlay
         shell: bash
         run: |
           set -euo pipefail
-          payload=/tmp/mcc-final-payload.tar.xz
+          baseline=baseline/MultiCharacterCampaignTOR-v1.0.41-source-baseline.zip
+          encoded=/tmp/mcc-overlay.tar.xz.b64
+          overlay=/tmp/mcc-overlay.tar.xz
+
+          test "$(sha256sum "$baseline" | awk '{print $1}')" = "9754b4f446f3d57686655916b6b00f0e3476ec633ac71af459927c3e851ca1af"
+          cat .bootstrap/overlay.tar.xz.b64/part-*.txt > "$encoded"
+          test "$(wc -c < "$encoded" | tr -d ' ')" = "55196"
+          base64 --decode "$encoded" > "$overlay"
+          test "$(sha256sum "$overlay" | awk '{print $1}')" = "018861b5b47b739f79e800a831355d7b1be2678e2398220a86bfe3283c615882"
+          xz --test "$overlay"
+
+      - name: Reconstruct materialized repository
+        shell: bash
+        run: |
+          set -euo pipefail
           out=/tmp/mcc-materialized
-          cat .bootstrap/final-payload.tar.xz.b64/part-*.txt | base64 --decode > "$payload"
-          xz --test "$payload"
           mkdir -p "$out"
-          tar -xJf "$payload" -C "$out"
+          unzip -q baseline/MultiCharacterCampaignTOR-v1.0.41-source-baseline.zip -d "$out"
+          tar -xJf /tmp/mcc-overlay.tar.xz -C "$out"
 
-          src="$out"
-          if [[ ! -d "$src/Modules" ]]; then
-            candidate="$(find "$src" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-            if [[ -n "$candidate" && -d "$candidate/Modules" ]]; then
-              src="$candidate"
-            fi
-          fi
+          test -f "$out/Modules/MultiCharacterCampaignTOR/SubModule.xml"
+          test -d "$out/Modules/MultiCharacterCampaignTOR/Source/CSharp"
+          grep -RIl --include='*.cs' -E 'MapEvent|map event' "$out/Modules/MultiCharacterCampaignTOR/Source/CSharp" >/dev/null
+          find "$out" -maxdepth 7 -type f | sort | sed -n '1,220p'
 
-          test -f "$src/Modules/MultiCharacterCampaignTOR/SubModule.xml"
-          test -d "$src/Modules/MultiCharacterCampaignTOR/Source/CSharp"
-          grep -RIl --include='*.cs' -E 'MapEvent|map event' "$src/Modules/MultiCharacterCampaignTOR/Source/CSharp" >/dev/null
-          printf '%s' "$src" > /tmp/mcc-materialized-source
-
-      - name: Replace bootstrap tree and push
-        shell: bash
-        run: |
-          set -euo pipefail
-          src="$(cat /tmp/mcc-materialized-source)"
-          rsync -a --delete --exclude='.git/' "$src/" "$GITHUB_WORKSPACE/"
+          rsync -a --delete --exclude='.git/' "$out/" "$GITHUB_WORKSPACE/"
           git status --short
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
-          git diff --cached --quiet && { echo 'Payload produced no changes'; exit 1; }
+          git diff --cached --quiet && { echo 'Reconstruction produced no changes'; exit 1; }
           git commit -m "Materialize v1.1.0 source and release pipeline"
           git push origin HEAD:agent/v1.1.0-battle-intervention
