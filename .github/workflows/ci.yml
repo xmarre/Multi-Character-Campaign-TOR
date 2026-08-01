@@ -82,6 +82,16 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
+          $assemblyDir = $env:BANNERLORD_BIN
+          $harmonyPath = $env:HARMONY_DLL
+          [System.AppDomain]::CurrentDomain.add_AssemblyResolve({
+            param($sender, $args)
+            $name = (New-Object System.Reflection.AssemblyName($args.Name)).Name + '.dll'
+            $candidate = Join-Path $assemblyDir $name
+            if (Test-Path $candidate) { return [System.Reflection.Assembly]::LoadFrom($candidate) }
+            if ($name -eq '0Harmony.dll' -and (Test-Path $harmonyPath)) { return [System.Reflection.Assembly]::LoadFrom($harmonyPath) }
+            return $null
+          })
           $core = [System.Reflection.Assembly]::LoadFrom((Resolve-Path 'src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll'))
           $identity = [System.Reflection.Assembly]::LoadFrom((Resolve-Path 'src/IdentityGuard/bin/Release/MultiCharacterCampaignTOR.IdentityGuard.v140.dll'))
           $flags = [System.Reflection.BindingFlags]'Public,NonPublic,Instance,Static'
