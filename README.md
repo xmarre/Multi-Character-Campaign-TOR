@@ -4,25 +4,27 @@ Multi-Character Campaign support for **Mount & Blade II: Bannerlord 1.3.15** and
 
 The mod lets one campaign contain multiple persistent playable heroes. Registered characters can remain in the main party, lead independent player-clan parties, or become the active player character through the campaign management interface.
 
-## v1.2.1
+## v1.3.0
 
-Version 1.2.1 fixes the two v1.2.0 UI/lifecycle regressions:
+Version 1.3.0 expands and hardens shared-character battle intervention:
 
-- restores the selectable takeover and reinforcement rows in the shared-character battle alert;
-- removes the oversized custom roster dump from the inquiry body;
-- opens Bannerlord's native `MapEvent` battle troop tooltip when either enabled action is hovered;
-- keeps the compact native strength prediction visible in the alert;
-- returns from **Manage shared characters** to the exact village, town, castle, camp, or settlement menu from which it was opened;
-- retains normal direct map return when the manager was opened with Ctrl+R;
-- adds no recurring scans, tooltip polling, save migration, or new save data.
+- replaces the binary every-battle/predicted-loss-only setting with any whole friendly-strength-share threshold from 0% to 100%;
+- supports close and difficult predicted victories through practical thresholds such as 55%, 60%, 67%, and 75%;
+- migrates existing saves automatically to 50% or 100%;
+- continues to alert when Bannerlord cannot produce a valid forecast;
+- fixes the standalone reinforcement order moving briefly and then stopping;
+- routes reinforcements to the active battle site and invokes native interaction on arrival;
+- prevents an AI-controlled outgoing party from selecting unrelated objectives during a combined takeover/reinforcement trip;
+- releases every temporary AI lock when the order completes, becomes invalid, or the battle ends;
+- checks only active reinforcement orders and adds no global party scan.
 
-The optional predicted-loss-only alert policy, combined takeover and reinforcement flow, encounter cleanup, and independent-party treasury fix remain active.
+The compact selectable alert, native battle tooltip, immediate takeover encounter, independent-party treasury fix, post-battle encounter cleanup, and settlement-manager Return fix remain active.
 
-See [`module/CHANGELOG-1.2.1.md`](module/CHANGELOG-1.2.1.md) for this release and [`module/CHANGELOG.md`](module/CHANGELOG.md) for earlier release history.
+See [`module/CHANGELOG-1.3.0.md`](module/CHANGELOG-1.3.0.md) for this release and [`module/CHANGELOG.md`](module/CHANGELOG.md) for earlier release history.
 
 ## Build
 
-The maintained fixes are contained in the `IdentityGuard` sidecar. CI builds the complete six-project solution against the Bannerlord 1.3.15 reference assemblies, validates the exact tooltip, hint-hover, map-event, game-menu, finance, and player-encounter surfaces, and runs a .NET Framework/Harmony patch-installation smoke test.
+The maintained fixes are contained in the `IdentityGuard` sidecar. CI builds the complete six-project solution against the Bannerlord 1.3.15 reference assemblies, validates the exact movement, interaction, AI-lock, strength-query, map-event, tooltip, finance, and encounter surfaces, and runs a .NET Framework/Harmony patch-installation smoke test.
 
 The remaining source is reconstructed development source for the v1.0.41 runtime baseline. Its provenance and limitations are documented in the source directories and `module/SOURCE_INFO.md`.
 
