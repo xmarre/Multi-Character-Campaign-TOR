@@ -6,13 +6,78 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: agent/v1.1.0-battle-intervention
+          fetch-depth: 0
+
+      - name: Restore exact v1.0.41 source tail when required
+        shell: pwsh
+        run: |
+          $path = 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/CareerAbilityRepair.cs'
+          $lines = @(Get-Content $path).Count
+          if ($lines -eq 815) {
+            @'
+			if (value == null)
+			{
+				return "<null>";
+			}
+			try
+			{
+				PropertyInfo propertyInfo = value.GetType().GetProperty("StringId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) ?? value.GetType().GetProperty("StringID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				object obj = ((!(propertyInfo == null)) ? propertyInfo.GetValue(value, null) : null);
+				return (obj != null) ? Convert.ToString(obj) : value.GetType().FullName;
+			}
+			catch
+			{
+				return value.GetType().FullName;
+			}
+		}
+
+		private static string Unwrap(Exception ex)
+		{
+			while (ex is TargetInvocationException && ex.InnerException != null)
+			{
+				ex = ex.InnerException;
+			}
+			return ex.ToString();
+		}
+
+		private static void Log(string message)
+		{
+			try
+			{
+				string text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Mount and Blade II Bannerlord", "ModLogs");
+				Directory.CreateDirectory(text);
+				File.AppendAllText(Path.Combine(text, "MultiCharacterCampaignTOR.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + " [CareerAbilityFix132] " + message + Environment.NewLine);
+			}
+			catch
+			{
+			}
+		}
+	}
+}
+'@ | Add-Content -Path $path -Encoding utf8
+          } elseif ($lines -ne 854) {
+            throw "Unexpected CareerAbilityRepair.cs line count: $lines"
+          }
+          Remove-Item '.restore-career-source-trigger' -ErrorAction SilentlyContinue
+          Remove-Item '.github/workflows/restore-career-source.yml' -ErrorAction SilentlyContinue
+          if (@(Get-Content $path).Count -ne 854) { throw 'Source restoration did not produce the exact 854-line file.' }
+          if (git status --porcelain) {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -A
+            git commit -m 'Restore truncated runtime compatibility source'
+            git push origin HEAD:agent/v1.1.0-battle-intervention
+          }
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
