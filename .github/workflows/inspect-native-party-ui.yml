@@ -19,7 +19,7 @@ jobs:
       - name: Restore Bannerlord references
         shell: pwsh
         run: dotnet restore src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj
-      - name: Inspect UI types
+      - name: Inspect exact tooltip and menu APIs
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -33,26 +33,36 @@ jobs:
             if (Test-Path $candidate) { return [System.Reflection.Assembly]::LoadFrom($candidate) }
             return $null
           })
-          $assemblies = @()
+          $assemblies = @{}
           foreach ($dll in Get-ChildItem $dir -Filter '*.dll') {
-            try { $assemblies += [System.Reflection.Assembly]::LoadFrom($dll.FullName) } catch {}
+            try {
+              $asm = [System.Reflection.Assembly]::LoadFrom($dll.FullName)
+              $assemblies[$asm.GetName().Name] = $asm
+            } catch {}
           }
           $flags = [System.Reflection.BindingFlags]'Public,NonPublic,Instance,Static'
-          $patterns = 'PartyTooltip|TroopTooltip|PartyScreenManager|InquiryElementVM|MultiSelectionInquiry|MapMobileParty|PartyInfo|PartyVM|TroopVM|Tooltip|InformationManager|HintViewModel'
-          foreach ($asm in $assemblies) {
-            $types = @()
-            try { $types = $asm.GetTypes() } catch { $types = $_.Exception.Types | Where-Object { $_ } }
-            foreach ($type in $types | Where-Object { $_.FullName -match $patterns }) {
-              Write-Host "===== $($asm.GetName().Name) :: $($type.FullName) ====="
-              foreach ($ctor in $type.GetConstructors($flags)) {
-                $params = ($ctor.GetParameters() | ForEach-Object { "$($_.ParameterType.FullName) $($_.Name)" }) -join ', '
-                Write-Host "CTOR ($params)"
-              }
-              foreach ($field in $type.GetFields($flags)) { Write-Host "FIELD $($field.FieldType.FullName) $($field.Name)" }
-              foreach ($property in $type.GetProperties($flags)) { Write-Host "PROPERTY $($property.PropertyType.FullName) $($property.Name)" }
-              foreach ($method in $type.GetMethods($flags) | Where-Object { $_.DeclaringType -eq $type }) {
-                $params = ($method.GetParameters() | ForEach-Object { "$($_.ParameterType.FullName) $($_.Name)" }) -join ', '
-                Write-Host "METHOD $($method.ReturnType.FullName) $($method.Name)($params) static=$($method.IsStatic)"
+          function Print-Type([string]$assemblyName, [string]$typeName, [string]$methodFilter) {
+            $asm = $assemblies[$assemblyName]
+            if (-not $asm) { Write-Host "MISSING ASSEMBLY $assemblyName"; return }
+            $type = $asm.GetType($typeName, $false)
+            if (-not $type) { Write-Host "MISSING TYPE $assemblyName :: $typeName"; return }
+            Write-Host "===== $assemblyName :: $typeName ====="
+            foreach ($property in $type.GetProperties($flags)) {
+              if (-not $methodFilter -or $property.Name -match $methodFilter) {
+                Write-Host "PROPERTY $($property.PropertyType.FullName) $($property.Name) get=$($property.CanRead) set=$($property.CanWrite)"
               }
             }
+            foreach ($method in $type.GetMethods($flags) | Where-Object { $_.DeclaringType -eq $type }) {
+              if ($methodFilter -and $method.Name -notmatch $methodFilter) { continue }
+              $params = ($method.GetParameters() | ForEach-Object { "$($_.ParameterType.FullName) $($_.Name)" }) -join ', '
+              Write-Host "METHOD $($method.ReturnType.FullName) $($method.Name)($params) static=$($method.IsStatic)"
+            }
           }
+          Print-Type 'TaleWorlds.Core' 'TaleWorlds.Core.InformationManager' 'Tooltip|Inquiry|Hint'
+          Print-Type 'TaleWorlds.Core' 'TaleWorlds.Core.MBInformationManager' 'Tooltip|Inquiry|Hint'
+          Print-Type 'TaleWorlds.CampaignSystem' 'TaleWorlds.CampaignSystem.GameMenus.GameMenu' 'SwitchToMenu|ExitToLast|StringId|Current'
+          Print-Type 'TaleWorlds.CampaignSystem' 'TaleWorlds.CampaignSystem.GameMenus.GameMenuManager' 'LastGameMenu|Current|Menu'
+          Print-Type 'TaleWorlds.CampaignSystem' 'TaleWorlds.CampaignSystem.Campaign' 'CurrentMenuContext|GameMenuManager|Current'
+          Print-Type 'TaleWorlds.CampaignSystem' 'TaleWorlds.CampaignSystem.GameMenus.MenuContext' 'GameMenu|Current'
+          Print-Type 'TaleWorlds.Core.ViewModelCollection' 'TaleWorlds.Core.ViewModelCollection.Information.HintViewModel' 'ExecuteBeginHint|ExecuteEndHint'
+          Print-Type 'TaleWorlds.CampaignSystem.ViewModelCollection' 'TaleWorlds.CampaignSystem.ViewModelCollection.TooltipRefresherCollection' 'RefreshMapEventTooltip|AddEncounterParties'
