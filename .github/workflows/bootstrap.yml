@@ -27,11 +27,19 @@ jobs:
           encoded=/tmp/mcc-overlay.tar.xz.b64
           overlay=/tmp/mcc-overlay.tar.xz
 
-          test "$(sha256sum "$baseline" | awk '{print $1}')" = "9754b4f446f3d57686655916b6b00f0e3476ec633ac71af459927c3e851ca1af"
-          cat .bootstrap/overlay.tar.xz.b64/part-*.txt > "$encoded"
-          test "$(wc -c < "$encoded" | tr -d ' ')" = "55196"
+          actual_baseline="$(sha256sum "$baseline" | awk '{print $1}')"
+          echo "baseline sha256=$actual_baseline"
+          test "$actual_baseline" = "9754b4f446f3d57686655916b6b00f0e3476ec633ac71af459927c3e851ca1af"
+
+          cat .bootstrap/overlay.tar.xz.b64/part-*.txt | tr -d '\r\n' > "$encoded"
+          actual_length="$(wc -c < "$encoded" | tr -d ' ')"
+          echo "overlay encoded length=$actual_length"
+          test "$actual_length" = "55196"
+
           base64 --decode "$encoded" > "$overlay"
-          test "$(sha256sum "$overlay" | awk '{print $1}')" = "018861b5b47b739f79e800a831355d7b1be2678e2398220a86bfe3283c615882"
+          actual_overlay="$(sha256sum "$overlay" | awk '{print $1}')"
+          echo "overlay sha256=$actual_overlay"
+          test "$actual_overlay" = "018861b5b47b739f79e800a831355d7b1be2678e2398220a86bfe3283c615882"
           xz --test "$overlay"
 
       - name: Reconstruct materialized repository
