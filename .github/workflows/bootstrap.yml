@@ -47,11 +47,18 @@ jobs:
           echo "tar status=$tar_status"
 
           find "$out" -maxdepth 8 -type f | sort | sed -n '1,300p'
-          test -f "$out/Modules/MultiCharacterCampaignTOR/SubModule.xml"
-          test -d "$out/Modules/MultiCharacterCampaignTOR/Source/CSharp"
-          test -f "$out/Modules/MultiCharacterCampaignTOR/Source/CSharp/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/RemotePartySwitch.cs"
-          grep -RIl --include='*.cs' -E 'Take control|Take command|reinforce|MapEvent' "$out/Modules/MultiCharacterCampaignTOR/Source/CSharp/IdentityGuard" >/dev/null
-          test -f "$out/.github/workflows/build-release.yml" -o -f "$out/.github/workflows/build.yml"
+
+          test -f "$out/module/SubModule.xml"
+          test -f "$out/module/CHANGELOG.md"
+          test -f "$out/scripts/package_release.py"
+          test -f "$out/src/MultiCharacterCampaignTOR.CSharp.sln"
+          test -f "$out/src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj"
+          test -f "$out/src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleInterventionAlert.cs"
+          test -f "$out/src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/RemotePartySwitch.cs"
+          test -f "$out/src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/RuntimeIdentityGuard.cs"
+          test -s "$out/src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleInterventionAlert.cs"
+          grep -E 'MapEvent|map event' "$out/src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleInterventionAlert.cs" >/dev/null
+          grep -E 'Take|control|command|reinforc' "$out/src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/BattleInterventionAlert.cs" >/dev/null
 
           rsync -a --delete --exclude='.git/' "$out/" "$GITHUB_WORKSPACE/"
           git status --short
