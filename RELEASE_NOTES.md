@@ -1,35 +1,51 @@
-# Multi-Character Campaign - TOR v1.1.2
+# Multi-Character Campaign - TOR v1.2.0
 
 Released: 1 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
-Validated source merge: `f9373e59140d150105fbdc2ec2622602e77b98d2`.
+## Optional predicted-loss alerts
 
-## Fixed: battle takeover lifecycle
+- Shared-character battle alerts can now be limited to battles that Bannerlord currently predicts the character's side will lose.
+- The existing behavior remains the default: every eligible shared-character battle produces an alert.
+- Change the policy from **Manage shared characters** using either:
+  - **Battle alerts: notify only for predicted losses**
+  - **Battle alerts: notify for every eligible battle**
+- The selected policy is stored in the campaign save.
+- Prediction uses Bannerlord 1.3.15's native side-relative strength result for the active `MapEvent`. It is a current forecast, not a guaranteed result.
+- A forecast counts as a predicted loss only when the shared character's complete battle side has less native strength than the opposing side.
+- If Bannerlord cannot provide a valid forecast, the alert is shown as a safety fallback.
+- When another party joins the active map event, loss-only mode re-evaluates that exact battle. A newly unfavorable forecast can therefore produce an alert even when the fight originally looked favorable.
 
-- Fixed taking control of a shared character's engaged party leaving Bannerlord with an incomplete player encounter.
-- Version 1.1.1 used the low-level `PlayerEncounter.RestartPlayerEncounter` method. That method creates the encounter object and assigns the parties, but it does not run the native initialization that joins the player to the existing map event, opens the encounter menu, and establishes the normal cleanup lifecycle.
-- Version 1.1.2 uses `EncounterManager.RestartPlayerEncounter(attackerParty, defenderParty)`, the high-level Bannerlord entry point used by ordinary campaign-map encounters.
-- After the switch completes, the native attack/fight encounter window opens automatically on the next application tick. No additional click on the enemy party is required.
-- Completing or leaving the battle now follows Bannerlord's normal encounter lifecycle, so the newly controlled party is not left unable to initiate later attacks.
+## Strength and troop composition
 
-## Added: combined takeover and reinforcement
+The alert now shows both battle sides' current:
 
-- The battle alert now allows **Take control** and **Send the current party to reinforce** to be selected together.
-- When both are selected, the original MainParty is captured before the switch, transferred to AI control, and ordered toward the selected battle after the switch transaction finishes.
-- The reinforcement order is applied after the outgoing-party handoff sets its normal temporary hold state, preventing that handoff from erasing the order.
-- Bannerlord 1.3.15's actual `SetMoveEngageParty(MobileParty, NavigationType)` signature is used with `NavigationType.Default`.
-- The outgoing AI party's immediate behavior refresh is cleared after the engage order so the selected target remains authoritative.
+- ready troop count;
+- wounded troop count;
+- native combat-strength estimate;
+- infantry, ranged, cavalry, horse-archer, and TOR-specific formation composition;
+- most numerous troop types.
 
-## Unchanged
+Hovering either intervention action displays a longer troop breakdown. Counts aggregate all currently involved parties on each side, not only the endangered shared character's individual party.
 
-- The v1.1.1 independent-party treasury and excessive `Caravan and Party Income` fixes remain active.
-- No recurring campaign-party scan, global hero scan, new serialized save key, or save migration was added.
+## Existing intervention flow retained
+
+- **Take control** still switches into the endangered character and opens Bannerlord's native attack/fight encounter immediately.
+- **Send the current party to reinforce** remains available independently.
+- Both actions can still be selected together, sending the original AI-controlled party toward the fight after control moves.
+- The v1.1.2 encounter cleanup and post-battle attack fix remain unchanged.
+- The v1.1.1 independent-party treasury fix remains unchanged.
+
+## Performance and save scope
+
+- Initial detection remains event-driven on map-event start.
+- Forecast re-evaluation occurs only when another party joins that same map event.
+- No recurring global party scan, hero scan, or campaign-tick prediction loop was added.
+- One new boolean save value stores the selected alert policy. Existing saves default to alerting for every eligible battle.
 
 ## Validation
 
 - Complete six-project Release build against Bannerlord 1.3.15 reference assemblies.
-- CI verifies the high-level `EncounterManager.RestartPlayerEncounter(PartyBase attackerParty, PartyBase defenderParty)` API.
-- CI verifies the two-parameter `MobileParty.SetMoveEngageParty(MobileParty party, NavigationType navigationType)` API and the `NavigationType.Default` enum value.
-- The live encounter menu, battle completion, and AI reinforcement arrival require an in-game campaign test. Keep a backup save and use a new save slot for the first test.
+- CI verifies the exact native side-strength, side-party enumeration, troop-roster, formation-class, encounter, and reinforcement APIs used by the feature.
+- The first live test should confirm the management-menu toggle, alert suppression in a clearly favorable battle, alert appearance in a clearly unfavorable battle, and the displayed TOR troop names/formations. Use a backup save and a new save slot for that first test.
