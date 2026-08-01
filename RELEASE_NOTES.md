@@ -1,53 +1,43 @@
-# Multi-Character Campaign - TOR v1.2.0
+# Multi-Character Campaign - TOR v1.2.1
 
 Released: 1 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
-Validated source merge: `09c85968587f46fce403ddff7c3a6770bd073977`.
+## Fixed: unusable battle intervention alert
 
-## Optional predicted-loss alerts
+- Version 1.2.0 placed a full custom troop roster inside the multi-selection inquiry body. In sufficiently varied TOR battles, that text consumed the inquiry layout and pushed the two selectable action rows out of the usable window.
+- Version 1.2.1 removes the roster dump from the inquiry body. The alert is compact and again exposes both selectable actions:
+  - **Take control and continue the battle**
+  - **Send the current party to reinforce**
+- The existing **Apply selected actions** button works with either action or both actions together.
+- The predicted result and the two native side-strength values remain visible in the compact alert.
 
-- Shared-character battle alerts can now be limited to battles that Bannerlord currently predicts the character's side will lose.
-- The existing behavior remains the default: every eligible shared-character battle produces an alert.
-- Change the policy from **Manage shared characters** using either:
-  - **Battle alerts: notify only for predicted losses**
-  - **Battle alerts: notify for every eligible battle**
-- The selected policy is stored in the campaign save.
-- Prediction uses Bannerlord 1.3.15's native side-relative strength result for the active `MapEvent`. It is a current forecast, not a guaranteed result.
-- A forecast counts as a predicted loss only when the shared character's complete battle side has less native strength than the opposing side.
-- If Bannerlord cannot provide a valid forecast, the alert is shown as a safety fallback.
-- When another party joins the active map event, loss-only mode re-evaluates that exact battle. A newly unfavorable forecast can therefore produce an alert even when the fight originally looked favorable.
+## Native Bannerlord troop tooltip
 
-## Strength and troop composition
+- Hover either enabled intervention action to open Bannerlord's native `MapEvent` battle tooltip.
+- The hotfix invokes Bannerlord 1.3.15's registered tooltip presenter with the active map event instead of recreating its troop viewer in inquiry text.
+- The native tooltip owns battle-side aggregation, party and hero presentation, troop rows, wounded information, hidden-information rules, and TOR troop/formation data.
+- Disabled actions continue to show their specific reason for being unavailable.
+- The native tooltip is closed when the hover ends, the inquiry closes, another alert opens, or the campaign changes.
 
-The alert now shows both battle sides' current:
+## Fixed: Return from settlement manager
 
-- ready troop count;
-- wounded troop count;
-- native combat-strength estimate;
-- infantry, ranged, cavalry, horse-archer, and TOR-specific formation composition;
-- most numerous troop types.
+- Opening **Manage shared characters** from a village, town, castle, camp, or settlement and selecting **Return** no longer drops directly to the campaign map while the active party remains settlement-bound and invisible.
+- The manager records the exact source menu and returns to it, preserving Bannerlord's normal settlement lifecycle.
+- Opening the manager with **Ctrl+R** from the unobstructed campaign map still returns directly to the campaign map.
+- No character switch is required to restore the active party.
 
-Hovering either intervention action displays a longer troop breakdown. Counts aggregate all currently involved parties on each side, not only the endangered shared character's individual party.
+## Existing behavior retained
 
-## Existing intervention flow retained
-
-- **Take control** still switches into the endangered character and opens Bannerlord's native attack/fight encounter immediately.
-- **Send the current party to reinforce** remains available independently.
-- Both actions can still be selected together, sending the original AI-controlled party toward the fight after control moves.
-- The v1.1.2 encounter cleanup and post-battle attack fix remain unchanged.
-- The v1.1.1 independent-party treasury fix remains unchanged.
-
-## Performance and save scope
-
-- Initial detection remains event-driven on map-event start.
-- Forecast re-evaluation occurs only when another party joins that same map event.
-- No recurring global party scan, hero scan, or campaign-tick prediction loop was added.
-- One new boolean save value stores the selected alert policy. Existing saves default to alerting for every eligible battle.
+- Optional predicted-loss-only alerts remain available and save normally.
+- Late battle reinforcements still trigger event-driven forecast reevaluation.
+- Takeover, reinforcement, combined takeover-plus-reinforcement, encounter cleanup, and the independent-party treasury fix remain unchanged.
+- No recurring party scans, tooltip polling, campaign reconciliation, or new save data were added.
 
 ## Validation
 
-- Complete six-project Release build against Bannerlord 1.3.15 reference assemblies.
-- CI verifies the exact native side-strength, side-party enumeration, troop-roster, formation-class, encounter, and reinforcement APIs used by the feature.
-- The first live test should confirm the management-menu toggle, alert suppression in a clearly favorable battle, alert appearance in a clearly unfavorable battle, and the displayed TOR troop names/formations. Use a backup save and a new save slot for that first test.
+- Complete six-project Release build against Bannerlord 1.3.15 reference assemblies: zero warnings and zero errors.
+- CI verifies the exact native tooltip, hint-hover, map-event, side-strength, encounter, reinforcement, and game-menu APIs used by the hotfix.
+- A .NET Framework/Harmony smoke runner loads the built module and confirms installation of the prediction settings, prediction flow, priority bridge, compact alert/native-tooltip bridge, and manager-return bridge.
+- Actual Gauntlet rendering and settlement-menu behavior require the first in-game test. Delete the old module folder before installing, back up the save, and use a new save slot for that test.
