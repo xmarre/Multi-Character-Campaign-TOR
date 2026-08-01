@@ -1,5 +1,7 @@
 # Multi-Character Campaign - TOR v1.1.0
 
+Released: 1 August 2026.
+
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
 ## Added
