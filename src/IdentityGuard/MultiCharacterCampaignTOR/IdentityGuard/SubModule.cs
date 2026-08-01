@@ -17,6 +17,7 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			BattleInterventionFlowFix.Install();
 			BattleInterventionSettings.Install();
 			BattleInterventionPrediction.Install();
+			BattleInterventionPredictionPriorityBridge.Install();
 		}
 
 		protected override void OnApplicationTick(float dt)
