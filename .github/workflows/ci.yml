@@ -82,16 +82,18 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $assemblyDir = $env:BANNERLORD_BIN
-          $harmonyPath = $env:HARMONY_DLL
           [System.AppDomain]::CurrentDomain.add_AssemblyResolve({
             param($sender, $args)
             $name = (New-Object System.Reflection.AssemblyName($args.Name)).Name + '.dll'
-            $candidate = Join-Path $assemblyDir $name
+            $candidate = Join-Path $env:BANNERLORD_BIN $name
             if (Test-Path $candidate) { return [System.Reflection.Assembly]::LoadFrom($candidate) }
-            if ($name -eq '0Harmony.dll' -and (Test-Path $harmonyPath)) { return [System.Reflection.Assembly]::LoadFrom($harmonyPath) }
+            if ($name -eq '0Harmony.dll' -and (Test-Path $env:HARMONY_DLL)) { return [System.Reflection.Assembly]::LoadFrom($env:HARMONY_DLL) }
             return $null
           })
+          $harmonyAssembly = [System.Reflection.Assembly]::LoadFrom($env:HARMONY_DLL)
+          foreach ($reference in (Get-ChildItem $env:BANNERLORD_BIN -Filter '*.dll')) {
+            try { [void][System.Reflection.Assembly]::LoadFrom($reference.FullName) } catch { }
+          }
           $core = [System.Reflection.Assembly]::LoadFrom((Resolve-Path 'src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll'))
           $identity = [System.Reflection.Assembly]::LoadFrom((Resolve-Path 'src/IdentityGuard/bin/Release/MultiCharacterCampaignTOR.IdentityGuard.v140.dll'))
           $flags = [System.Reflection.BindingFlags]'Public,NonPublic,Instance,Static'
@@ -102,6 +104,10 @@ jobs:
           foreach ($name in @('BeforeSynchronizeGold','AfterSynchronizeGold','BeforeAddIncomeFromParty','BeforeIsDefenderInMapEvent','AfterCanUseRemoteParty','AfterPartyAddedToMapEvent')) {
             if (-not $fixes.GetMethod($name, $flags)) { throw "Missing runtime patch method $name" }
           }
+          $safety = $identity.GetType('MultiCharacterCampaignTOR.IdentityGuard.BattleTakeoverSafetyGuard', $true)
+          if (-not $safety.GetMethod('AfterCanUseRemoteParty', $flags)) { throw 'Missing final battle takeover safety postfix.' }
+          $harmonyMethod = $harmonyAssembly.GetType('HarmonyLib.HarmonyMethod', $true)
+          if (-not $harmonyMethod.GetField('priority', $flags)) { throw 'HarmonyMethod.priority is unavailable.' }
 
       - name: Inventory required outputs
         shell: pwsh
