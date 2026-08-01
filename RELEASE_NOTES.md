@@ -4,6 +4,8 @@ Released: 1 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
+Validated source merge: `8bacb5dd9f3c234a5449d87ef228664d0178e1ce`.
+
 ## Fixed: excessive Caravan and Party Income
 
 - Fixed remote shared-character parties receiving a copy of the active player's complete shared denar balance.
