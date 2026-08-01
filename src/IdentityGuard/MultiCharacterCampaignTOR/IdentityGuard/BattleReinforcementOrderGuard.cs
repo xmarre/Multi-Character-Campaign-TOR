@@ -18,6 +18,9 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			internal readonly MapEvent MapEvent;
 			internal CampaignVec2 Destination;
 			internal bool AiDecisionLock;
+			internal bool CapturedAiState;
+			internal bool OriginalDoNotMakeNewDecisions;
+			internal bool OriginalRethinkAtNextHourlyTick;
 			internal float InteractionRetryDelay;
 
 			internal ActiveOrder(MobileParty party, MobileParty targetParty, MapEvent mapEvent)
@@ -264,10 +267,15 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			{
 				return;
 			}
+			if (!order.CapturedAiState)
+			{
+				order.OriginalDoNotMakeNewDecisions = party.Ai.DoNotMakeNewDecisions;
+				order.OriginalRethinkAtNextHourlyTick = party.Ai.RethinkAtNextHourlyTick;
+				order.CapturedAiState = true;
+			}
 			party.Ai.EnableAi();
 			party.Ai.SetDoNotMakeNewDecisions(true);
 			party.Ai.RethinkAtNextHourlyTick = false;
-			WriteMember(party.Ai, "DefaultBehaviorNeedsUpdate", false);
 			order.AiDecisionLock = true;
 		}
 
@@ -278,11 +286,10 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 				return;
 			}
 			MobileParty party = order.Party;
-			if (party != null && party.Ai != null)
+			if (party != null && party.Ai != null && order.CapturedAiState)
 			{
-				party.Ai.SetDoNotMakeNewDecisions(false);
-				party.Ai.RethinkAtNextHourlyTick = true;
-				WriteMember(party.Ai, "DefaultBehaviorNeedsUpdate", true);
+				party.Ai.SetDoNotMakeNewDecisions(order.OriginalDoNotMakeNewDecisions);
+				party.Ai.RethinkAtNextHourlyTick = order.OriginalRethinkAtNextHourlyTick;
 			}
 			order.AiDecisionLock = false;
 		}
@@ -427,25 +434,6 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 				throw new TypeLoadException(qualifiedName);
 			}
 			return type;
-		}
-
-		private static void WriteMember(object instance, string name, object value)
-		{
-			if (instance == null)
-			{
-				return;
-			}
-			PropertyInfo property = instance.GetType().GetProperty(name, InstanceFlags);
-			if (property != null && property.CanWrite)
-			{
-				property.SetValue(instance, value, null);
-				return;
-			}
-			FieldInfo field = instance.GetType().GetField(name, InstanceFlags) ?? instance.GetType().GetField("_" + char.ToLowerInvariant(name[0]) + name.Substring(1), InstanceFlags);
-			if (field != null)
-			{
-				field.SetValue(instance, value);
-			}
 		}
 
 		private static string SafeId(MobileParty party)
