@@ -1,0 +1,58 @@
+name: Inspect Bannerlord battle prediction APIs
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore Bannerlord references
+        shell: pwsh
+        run: dotnet restore src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj
+      - name: Inspect map-event and roster APIs
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $campaign = Get-ChildItem "$env:USERPROFILE\.nuget\packages" -Recurse -Filter TaleWorlds.CampaignSystem.dll | Select-Object -First 1
+          if (-not $campaign) { throw 'Campaign assembly missing.' }
+          $dir = $campaign.Directory.FullName
+          [System.AppDomain]::CurrentDomain.add_AssemblyResolve({
+            param($sender, $args)
+            $name = (New-Object System.Reflection.AssemblyName($args.Name)).Name + '.dll'
+            $path = Join-Path $dir $name
+            if (Test-Path $path) { return [System.Reflection.Assembly]::LoadFrom($path) }
+            return $null
+          })
+          foreach ($dll in (Get-ChildItem $dir -Filter '*.dll')) { try { [void][System.Reflection.Assembly]::LoadFrom($dll.FullName) } catch {} }
+          $asm = [System.Reflection.Assembly]::LoadFrom($campaign.FullName)
+          $flags = [System.Reflection.BindingFlags]'Public,NonPublic,Instance,Static'
+          foreach ($typeName in @(
+            'TaleWorlds.CampaignSystem.MapEvents.MapEvent',
+            'TaleWorlds.CampaignSystem.MapEvents.MapEventSide',
+            'TaleWorlds.CampaignSystem.MapEvents.MapEventParty',
+            'TaleWorlds.CampaignSystem.Party.PartyBase',
+            'TaleWorlds.CampaignSystem.Party.MobileParty',
+            'TaleWorlds.CampaignSystem.Roster.TroopRoster',
+            'TaleWorlds.CampaignSystem.Roster.TroopRosterElement',
+            'TaleWorlds.CampaignSystem.CharacterObject'
+          )) {
+            $type = $asm.GetType($typeName, $false)
+            if (-not $type) { Write-Host "MISSING TYPE $typeName"; continue }
+            Write-Host "===== $typeName ====="
+            $type.GetProperties($flags) | Where-Object { $_.Name -match 'Strength|Power|Troop|Roster|Party|Side|Count|Healthy|Wounded|Tier|Formation|Class|Member|Leader|Element|Character' } | Sort-Object Name | ForEach-Object { Write-Host "PROPERTY $($_.PropertyType.FullName) $($_.Name) get=$($_.CanRead)" }
+            $type.GetFields($flags) | Where-Object { $_.Name -match 'Strength|Power|Troop|Roster|Party|Side|Count|Healthy|Wounded|Tier|Formation|Class|Member|Leader|Element|Character' } | Sort-Object Name | ForEach-Object { Write-Host "FIELD $($_.FieldType.FullName) $($_.Name)" }
+            $type.GetMethods($flags) | Where-Object { $_.Name -match 'Strength|Power|Troop|Roster|Party|Side|Count|Healthy|Wounded|Tier|Formation|Class|Member|Leader|Element|Character' } | Sort-Object Name | ForEach-Object {
+              $params = ($_.GetParameters() | ForEach-Object { "$($_.ParameterType.FullName) $($_.Name)" }) -join ', '
+              Write-Host "METHOD $($_.ReturnType.FullName) $($_.Name)($params) static=$($_.IsStatic)"
+            }
+          }
