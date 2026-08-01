@@ -15,6 +15,8 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			SharedPartyRuntimeFixes.Install();
 			BattleTakeoverSafetyGuard.Install();
 			BattleInterventionFlowFix.Install();
+			BattleInterventionSettings.Install();
+			BattleInterventionPrediction.Install();
 		}
 
 		protected override void OnApplicationTick(float dt)
