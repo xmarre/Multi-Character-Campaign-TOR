@@ -1,0 +1,14 @@
+// RECONSTRUCTED DEVELOPMENT SOURCE
+// Decompiled from the exact Multi-Character Campaign - TOR v1.0.41 authoritative binary.
+// This is not the lost original authoring source. See Source/SOURCE_INFO.md and CanonicalIL/ for authority.
+
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
+using System.Security;
+using System.Security.Permissions;
+
+[assembly: AssemblyTitle("MultiCharacterCampaignTOR.RuntimeCompatibility")]
+[assembly: AssemblyFileVersion("1.0.40.0")]
+[assembly: AssemblyVersion("1.0.32.0")]

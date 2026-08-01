@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# .NET / Visual Studio
+.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# Local build and release output
+artifacts/
+dist/
+release/
+*.zip
+*.sha256
+
+# Logs and editor files
+*.log
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

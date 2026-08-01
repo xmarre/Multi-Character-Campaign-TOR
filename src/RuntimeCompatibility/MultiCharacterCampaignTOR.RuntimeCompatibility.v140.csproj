@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <!-- Intentional: the release filename differs from the internal assembly identity. -->
+    <AssemblyName>MultiCharacterCampaignTOR.WaywatcherFix</AssemblyName>
+    <RootNamespace>MultiCharacterCampaignTOR</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <RecoveredCareerAbilityRepair>$(IntermediateOutputPath)RecoveredCareerAbilityRepair.cs</RecoveredCareerAbilityRepair>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="TaleWorlds.Core"><HintPath>$(BannerlordBin)\TaleWorlds.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.MountAndBlade"><HintPath>$(BannerlordBin)\TaleWorlds.MountAndBlade.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(RuntimeHarmonyDll)</HintPath><Private>false</Private></Reference>
+    <Compile Remove="MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.cs" />
+    <None Include="MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.cs" />
+    <None Include="MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.tail.csfrag" />
+  </ItemGroup>
+  <Target Name="AssembleRecoveredCareerAbilityRepair" BeforeTargets="CoreCompile">
+    <ReadLinesFromFile File="$(MSBuildProjectDirectory)\MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.cs">
+      <Output TaskParameter="Lines" ItemName="RecoveredCareerAbilityRepairHead" />
+    </ReadLinesFromFile>
+    <ReadLinesFromFile File="$(MSBuildProjectDirectory)\MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.tail.csfrag">
+      <Output TaskParameter="Lines" ItemName="RecoveredCareerAbilityRepairTail" />
+    </ReadLinesFromFile>
+    <WriteLinesToFile File="$(RecoveredCareerAbilityRepair)" Lines="@(RecoveredCareerAbilityRepairHead);@(RecoveredCareerAbilityRepairTail)" Overwrite="true" Encoding="UTF-8" />
+    <ItemGroup>
+      <Compile Include="$(RecoveredCareerAbilityRepair)" />
+    </ItemGroup>
+  </Target>
+  <Target Name="CreateReleaseFilename" AfterTargets="Build">
+    <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(TargetDir)MultiCharacterCampaignTOR.RuntimeCompatibility.v140.dll" />
+  </Target>
+</Project>

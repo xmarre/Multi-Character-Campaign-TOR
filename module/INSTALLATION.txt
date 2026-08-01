@@ -1,0 +1,20 @@
+MULTI-CHARACTER CAMPAIGN - TOR v1.0.41
+
+IMPORTANT FOR THIS UPDATE
+
+Fully exit Bannerlord before installing. Delete the existing
+Modules\MultiCharacterCampaignTOR folder, then copy in the folder from this
+archive. Do not merge while the game is running; loaded .NET assemblies cannot
+be replaced in the active process.
+
+IMPORTANT WHEN UPDATING FROM v1.0.10 OR EARLIER
+
+1. Delete the old folder:
+   Modules\TORSharedCharacterCampaign
+
+2. Install the new folder:
+   Modules\MultiCharacterCampaignTOR
+
+Do not leave both folders installed. The legacy Bannerlord module ID is intentionally retained for existing save compatibility, so installing both builds at once creates a duplicate module identity.
+
+Existing registered characters, shared gold, shared chest, active-character state, and career migration data use the same save keys as earlier versions.

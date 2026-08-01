@@ -1,0 +1,39 @@
+			if (value == null)
+			{
+				return "<null>";
+			}
+			try
+			{
+				PropertyInfo propertyInfo = value.GetType().GetProperty("StringId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) ?? value.GetType().GetProperty("StringID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				object obj = ((!(propertyInfo == null)) ? propertyInfo.GetValue(value, null) : null);
+				return (obj != null) ? Convert.ToString(obj) : value.GetType().FullName;
+			}
+			catch
+			{
+				return value.GetType().FullName;
+			}
+		}
+
+		private static string Unwrap(Exception ex)
+		{
+			while (ex is TargetInvocationException && ex.InnerException != null)
+			{
+				ex = ex.InnerException;
+			}
+			return ex.ToString();
+		}
+
+		private static void Log(string message)
+		{
+			try
+			{
+				string text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Mount and Blade II Bannerlord", "ModLogs");
+				Directory.CreateDirectory(text);
+				File.AppendAllText(Path.Combine(text, "MultiCharacterCampaignTOR.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + " [CareerAbilityFix132] " + message + Environment.NewLine);
+			}
+			catch
+			{
+			}
+		}
+	}
+}
