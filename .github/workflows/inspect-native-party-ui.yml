@@ -1,49 +1,14 @@
-name: Inspect native party UI APIs
+name: Manual native UI API diagnostics
 
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  inspect:
-    runs-on: windows-latest
+  diagnostics-disabled:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-      - name: Restore Bannerlord references
-        shell: pwsh
-        run: dotnet restore src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj
-      - name: Inspect tooltip presentation registry
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $library = Get-ChildItem "$env:USERPROFILE\.nuget\packages" -Recurse -Filter TaleWorlds.Library.dll | Select-Object -First 1
-          if (-not $library) { throw 'TaleWorlds.Library reference missing.' }
-          $dir = $library.Directory.FullName
-          [System.AppDomain]::CurrentDomain.add_AssemblyResolve({
-            param($sender, $args)
-            $name = (New-Object System.Reflection.AssemblyName($args.Name)).Name + '.dll'
-            $candidate = Join-Path $dir $name
-            if (Test-Path $candidate) { return [System.Reflection.Assembly]::LoadFrom($candidate) }
-            return $null
-          })
-          $asm = [System.Reflection.Assembly]::LoadFrom($library.FullName)
-          $flags = [System.Reflection.BindingFlags]'Public,NonPublic,Instance,Static'
-          foreach ($typeName in @('TaleWorlds.Library.InformationManager','TaleWorlds.Library.TooltipRegistry','TaleWorlds.Library.TooltipBaseVM')) {
-            $type = $asm.GetType($typeName, $false)
-            if (-not $type) { Write-Host "MISSING $typeName"; continue }
-            Write-Host "===== $typeName ====="
-            foreach ($event in $type.GetEvents($flags)) { Write-Host "EVENT $($event.EventHandlerType.FullName) $($event.Name)" }
-            foreach ($field in $type.GetFields($flags)) { Write-Host "FIELD $($field.FieldType.FullName) $($field.Name)" }
-            foreach ($property in $type.GetProperties($flags)) { Write-Host "PROPERTY $($property.PropertyType.FullName) $($property.Name)" }
-            foreach ($method in $type.GetMethods($flags) | Where-Object { $_.DeclaringType -eq $type }) {
-              $params = ($method.GetParameters() | ForEach-Object { "$($_.ParameterType.FullName) $($_.Name)" }) -join ', '
-              Write-Host "METHOD $($method.ReturnType.FullName) $($method.Name)($params) static=$($method.IsStatic)"
-            }
-          }
+      - name: Diagnostic workflow retired
+        run: echo "The v1.2.1 native tooltip and menu APIs are now validated by ci.yml."
