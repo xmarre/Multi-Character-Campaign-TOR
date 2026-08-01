@@ -18,6 +18,8 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			BattleInterventionSettings.Install();
 			BattleInterventionPrediction.Install();
 			BattleInterventionPredictionPriorityBridge.Install();
+			BattleAlertUiHotfix.Install();
+			ManagerReturnHotfix.Install();
 		}
 
 		protected override void OnApplicationTick(float dt)

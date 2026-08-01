@@ -1,0 +1,14 @@
+name: Manual native UI API diagnostics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostics-disabled:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Diagnostic workflow retired
+        run: echo "The v1.2.1 native tooltip and menu APIs are now validated by ci.yml."

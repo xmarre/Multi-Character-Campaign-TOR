@@ -77,6 +77,8 @@ internal static class Program
             InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.BattleInterventionSettings");
             InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.BattleInterventionPrediction");
             InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.BattleInterventionPredictionPriorityBridge");
+            InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.BattleAlertUiHotfix");
+            InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.ManagerReturnHotfix");
 
             Console.WriteLine("Runtime patch installation smoke test passed.");
             return 0;
