@@ -11,6 +11,22 @@
     <Reference Include="TaleWorlds.MountAndBlade"><HintPath>$(BannerlordBin)\TaleWorlds.MountAndBlade.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="0Harmony"><HintPath>$(RuntimeHarmonyDll)</HintPath><Private>false</Private></Reference>
   </ItemGroup>
+  <Target Name="AssembleRecoveredCareerAbilityRepair" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <RecoveredCareerAbilityRepair>$(IntermediateOutputPath)RecoveredCareerAbilityRepair.cs</RecoveredCareerAbilityRepair>
+    </PropertyGroup>
+    <ReadLinesFromFile File="$(MSBuildProjectDirectory)\MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.cs">
+      <Output TaskParameter="Lines" ItemName="RecoveredCareerAbilityRepairHead" />
+    </ReadLinesFromFile>
+    <ReadLinesFromFile File="$(MSBuildProjectDirectory)\MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.tail.csfrag">
+      <Output TaskParameter="Lines" ItemName="RecoveredCareerAbilityRepairTail" />
+    </ReadLinesFromFile>
+    <WriteLinesToFile File="$(RecoveredCareerAbilityRepair)" Lines="@(RecoveredCareerAbilityRepairHead);@(RecoveredCareerAbilityRepairTail)" Overwrite="true" Encoding="UTF-8" />
+    <ItemGroup>
+      <Compile Remove="$(MSBuildProjectDirectory)\MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.cs" />
+      <Compile Include="$(RecoveredCareerAbilityRepair)" />
+    </ItemGroup>
+  </Target>
   <Target Name="CreateReleaseFilename" AfterTargets="Build">
     <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(TargetDir)MultiCharacterCampaignTOR.RuntimeCompatibility.v140.dll" />
   </Target>
