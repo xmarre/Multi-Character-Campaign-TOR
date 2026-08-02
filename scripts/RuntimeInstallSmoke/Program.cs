@@ -81,6 +81,7 @@ internal static class Program
             InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.ManagerReturnHotfix");
             InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.BattleInterventionThresholdPolicy");
             InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.BattleReinforcementOrderGuard");
+            InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.SettlementCharacterSwitchMenuFix");
 
             Console.WriteLine("Runtime patch installation smoke test passed.");
             return 0;
