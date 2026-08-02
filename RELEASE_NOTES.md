@@ -1,63 +1,38 @@
-# Multi-Character Campaign - TOR v1.3.0
+# Multi-Character Campaign - TOR v1.3.1
 
 Released: 2 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
-Validated source merge: `02f95d6ce1b939cbdd608ad3abbf48d0bf6ef730`.
+Validated source merge: `cc2577294cf9f111f60cf38bc1fa6faa8acb0d78`.
 
-## Granular battle-alert threshold
+## Fixed settlement character-switch lock
 
-The previous binary choice has been replaced with one configurable threshold from 0% to 100%.
+Switching to another registered shared character from the MCC manager while inside a settlement could leave the custom manager attached to a stale Bannerlord settlement/menu input context. The only practical recovery was to enter **Wait here for some time**, which forced the native settlement flow to rebuild its state.
 
-The value is the maximum share of the battle's total native strength that the shared character's complete side may have before an alert is suppressed. Examples:
+The switch callback was running synchronously while Bannerlord's character-selection inquiry was still completing its affirmative-action teardown. `ChangePlayerCharacterAction.Apply` could therefore replace the active campaign identity before the inquiry and settlement menu lifecycle had finished.
 
-- **50%**: predicted defeats and approximately even battles;
-- **55%**: razor-close predicted victories and worse;
-- **60%**: difficult victories with substantial casualty risk and worse;
-- **67%**: alerts whenever the enemy retains at least roughly half of your side's strength;
-- **75%**: broad intervention coverage;
-- **100%**: every eligible battle.
+Version 1.3.1 now:
 
-Any whole percentage from 0 to 100 is accepted. The setting is available through **Manage shared characters > Configure battle alert threshold** and is stored in the campaign save.
+- intercepts only registered-character selections made from the MCC manager while the main party is inside a settlement;
+- defers the original selection callback for two application ticks so the inquiry closes first;
+- replays the existing switch transaction unchanged;
+- exits the custom manager on the following tick after a successful switch;
+- uses the existing `ManagerReturnHotfix` to return to the exact captured village, town, castle, camp, or settlement menu;
+- removes the need to use the waiting option to recover controls.
 
-This is deliberately described as a strength-share threshold rather than a casualty prediction. Bannerlord exposes a current side-relative combat-strength estimate, not a guaranteed casualty count. The 55–65% range is therefore a practical close/difficult-victory heuristic.
-
-Existing saves migrate automatically: the old predicted-loss-only policy becomes 50%, while the old every-battle policy becomes 100%. Prediction failures still show an alert as a safety fallback. The configured threshold is re-evaluated when another party joins an active battle.
-
-## Fixed reinforcement travel
-
-The earlier reinforcement action used `SetMoveEngageParty` against the shared party already participating in the battle. An in-battle party is not a normal visible campaign target, so the movement order could be cancelled almost immediately, producing the reported short movement followed by a stop.
-
-Version 1.3.0 instead:
-
-- moves the reinforcing party to the active battle site;
-- invokes Bannerlord's native party interaction when it reaches the native encounter distance;
-- keeps the route while the selected battle remains active;
-- permits the player to replace the movement order normally;
-- stops and reports the order if the battle ends before arrival.
-
-For a combined **take control + reinforce** action, the original party becomes AI-controlled after the handoff. It receives a temporary no-new-decisions lock tied only to that reinforcement order. The route is restored if ordinary AI processing replaces it. Its previous decision-lock and hourly-rethink values are restored when the reinforcement order ends, so state owned by another system is not blindly reset. The party should therefore not select unrelated objectives on the way to the chosen battle.
-
-## Existing intervention behavior retained
-
-- The compact selectable alert and Bannerlord-native battle tooltip remain in place.
-- Takeover still opens the existing fight encounter immediately.
-- Takeover and reinforcement can still be selected together.
-- Predicted-strength filtering remains event-driven.
-- The independent-party treasury fix, encounter cleanup, post-battle attack fix, and settlement-manager Return fix remain unchanged.
+Campaign-map/Ctrl+R switching, companion registration, career selection, battle takeover, reinforcement travel, finance handling, native troop tooltips, and granular alert thresholds are unchanged.
 
 ## Performance and save scope
 
-- No global party or hero scan was added.
-- Only currently active reinforcement orders are checked, at a throttled interval.
-- Two save values store and initialize the new threshold.
-- No physical party, troop, prisoner, inventory, ship, or settlement ownership is transferred by the reinforcement system.
+- No recurring party, hero, settlement, or menu scan was added.
+- The fix is active only while one deferred settlement switch is pending.
+- No new save values were added.
+- Existing saves remain compatible.
 
 ## Validation
 
 - Complete six-project Release build against Bannerlord 1.3.15 reference assemblies: zero warnings and zero errors.
-- Exact native movement, party-interaction, AI-decision-lock, encounter-distance, strength-query, text-inquiry, and map-event callback surfaces are checked by CI.
-- The .NET Framework/Harmony smoke runner loads the built module and installs both new runtime patches.
-- Final pre-merge CI artifact: `full-module-v1.3.0`, artifact ID `8824928958`, digest `b2044cd99cc8fbf8d1a66cb30062c02f1cede9caece5ecf222c7622b397c271c`.
-- Live campaign testing remains required for Gauntlet input rendering, player-party arrival interaction, and the AI-controlled outgoing party's full trip to a real battle.
+- The .NET Framework/Harmony smoke runner loaded the built module and installed `SettlementCharacterSwitchMenuFix` successfully.
+- Pre-release CI artifact: `full-module-v1.3.0`, artifact ID `8827344019`, digest `05c5fb2594ad933bfa7e4f6da055eaf95ebf60c780d6a5d22d9e3e8dd77151b5`.
+- Live testing remains required for the rendered selection inquiry and real village, town, and castle menu transitions.
