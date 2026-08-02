@@ -22,6 +22,7 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			ManagerReturnHotfix.Install();
 			BattleInterventionThresholdPolicy.Install();
 			BattleReinforcementOrderGuard.Install();
+			SettlementCharacterSwitchMenuFix.Install();
 		}
 
 		protected override void OnApplicationTick(float dt)
@@ -29,6 +30,7 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			base.OnApplicationTick(dt);
 			BattleInterventionAlert.Tick();
 			BattleReinforcementOrderGuard.Tick(dt);
+			SettlementCharacterSwitchMenuFix.Tick();
 		}
 	}
 }
