@@ -83,12 +83,14 @@ jobs:
           Require-Method 'TaleWorlds.CampaignSystem.Party.MobilePartyAi' 'SetDoNotMakeNewDecisions' 1 | Out-Null
           Require-Method 'TaleWorlds.CampaignSystem.MapEvents.MapEvent' 'GetStrengthsRelativeToParty' 3 | Out-Null
           Require-Method 'TaleWorlds.CampaignSystem.MapEvents.MapEvent' 'PartiesOnSide' 1 | Out-Null
+          Require-Method 'TaleWorlds.CampaignSystem.GameMenus.GameMenu' 'ExitToLast' 0 | Out-Null
 
           $mobileParty = $asm.GetType('TaleWorlds.CampaignSystem.Party.MobileParty', $true)
           $goToPoint = @($mobileParty.GetMethods($flags) | Where-Object { $_.Name -eq 'SetMoveGoToPoint' -and $_.GetParameters().Length -eq 2 })
           if ($goToPoint.Count -ne 1) { throw "Expected one SetMoveGoToPoint/2 overload, found $($goToPoint.Count)." }
           $navigationType = $goToPoint[0].GetParameters()[1].ParameterType
           if (-not $navigationType.IsEnum -or -not [Enum]::IsDefined($navigationType, 'Default')) { throw 'SetMoveGoToPoint does not expose NavigationType.Default.' }
+          if (-not $mobileParty.GetProperty('CurrentSettlement', $flags)) { throw 'MobileParty.CurrentSettlement is unavailable.' }
 
           $encounterModel = $asm.GetType('TaleWorlds.CampaignSystem.ComponentInterfaces.EncounterModel', $true)
           if (-not $encounterModel.GetProperty('NeededMaximumDistanceForEncounteringMobileParty', $flags)) { throw 'EncounterModel encounter-distance property is unavailable.' }
@@ -102,7 +104,7 @@ jobs:
           $textInquiry = $library.GetType('TaleWorlds.Library.TextInquiryData', $true)
           if (-not @($textInquiry.GetConstructors($flags) | Where-Object { $_.GetParameters().Length -ge 10 })) { throw 'TextInquiryData configurable-input constructor is unavailable.' }
 
-      - name: Inspect MCC v1.3.0 patch surfaces
+      - name: Inspect MCC v1.3.1 patch surfaces
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -114,14 +116,18 @@ jobs:
           foreach ($surface in @('SetMoveGoToPoint','OnPartyInteraction','SetDoNotMakeNewDecisions','NeededMaximumDistanceForEncounteringMobileParty','BeforeOrderPartyToBattle','AfterMapEventEnded','Tick(float dt)')) {
             if ($reinforcement -notmatch [regex]::Escape($surface)) { throw "Missing reinforcement surface $surface" }
           }
+          $settlementSwitch = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/SettlementCharacterSwitchMenuFix.cs' -Raw
+          foreach ($surface in @('DispatchSelection','BeforeDispatchSelection','CurrentSettlement','GameMenu.ExitToLast','ReturnToSettlementAfterSwitch','Tick()')) {
+            if ($settlementSwitch -notmatch [regex]::Escape($surface)) { throw "Missing settlement-switch surface $surface" }
+          }
           $submodule = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/SubModule.cs' -Raw
-          foreach ($surface in @('BattleInterventionThresholdPolicy.Install()','BattleReinforcementOrderGuard.Install()','BattleReinforcementOrderGuard.Tick(dt)')) {
-            if ($submodule -notmatch [regex]::Escape($surface)) { throw "Missing v1.3.0 installer/tick surface $surface" }
+          foreach ($surface in @('BattleInterventionThresholdPolicy.Install()','BattleReinforcementOrderGuard.Install()','BattleReinforcementOrderGuard.Tick(dt)','SettlementCharacterSwitchMenuFix.Install()','SettlementCharacterSwitchMenuFix.Tick()')) {
+            if ($submodule -notmatch [regex]::Escape($surface)) { throw "Missing v1.3.1 installer/tick surface $surface" }
           }
           $assemblyInfo = Get-Content 'src/IdentityGuard/Properties/AssemblyInfo.cs' -Raw
-          if ($assemblyInfo -notmatch 'AssemblyVersion\("1\.3\.0\.0"\)') { throw 'IdentityGuard assembly version is not 1.3.0.0.' }
+          if ($assemblyInfo -notmatch 'AssemblyVersion\("1\.3\.1\.0"\)') { throw 'IdentityGuard assembly version is not 1.3.1.0.' }
           $manifest = Get-Content 'module/SubModule.xml' -Raw
-          if ($manifest -notmatch '<Version value="v1\.3\.0"') { throw 'Module manifest is not v1.3.0.' }
+          if ($manifest -notmatch '<Version value="v1\.3\.1"') { throw 'Module manifest is not v1.3.1.' }
 
       - name: Inventory required outputs
         shell: pwsh
@@ -141,7 +147,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: full-module-v1.3.0
+          name: full-module-v1.3.1
           path: |
             src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll
             src/NativeCreation/bin/Release/MultiCharacterCampaignTOR.NativeCreation.dll
