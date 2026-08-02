@@ -29,7 +29,7 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 		private static Hero _pendingTarget;
 		private static Settlement _pendingSettlement;
 		private static int _dispatchDelayTicks;
-		private static int _refreshDelayTicks;
+		private static int _returnDelayTicks;
 
 		internal static void Install()
 		{
@@ -69,7 +69,7 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 				Patch(harmony, harmonyType, harmonyMethodType, _dispatchSelection, GetPatchMethod("BeforeDispatchSelection"), 900);
 
 				_installed = true;
-				RemotePartySwitch.Info("[SettlementCharacterSwitchMenuFix v1.3.1] Installed deferred settlement character-switch dispatch and manager-menu reconstruction.");
+				RemotePartySwitch.Info("[SettlementCharacterSwitchMenuFix v1.3.1] Installed deferred settlement character-switch dispatch and automatic return through the preserved settlement menu.");
 			}
 			catch (Exception ex)
 			{
@@ -96,12 +96,12 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 				return;
 			}
 
-			if (_refreshDelayTicks > 0)
+			if (_returnDelayTicks > 0)
 			{
-				_refreshDelayTicks--;
-				if (_refreshDelayTicks == 0)
+				_returnDelayTicks--;
+				if (_returnDelayTicks == 0)
 				{
-					RefreshManagerMenuAfterSwitch();
+					ReturnToSettlementAfterSwitch();
 				}
 			}
 		}
@@ -132,13 +132,13 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 				_pendingTarget = target;
 				_pendingSettlement = settlement;
 				_dispatchDelayTicks = 2;
-				_refreshDelayTicks = 0;
-				RemotePartySwitch.Info("[SettlementCharacterSwitchMenuFix] Deferred registered-character switch until the selection inquiry has completed teardown; target=" + SafeHeroId(target) + "; settlement=" + SafeSettlementId(settlement) + ".");
+				_returnDelayTicks = 0;
+				RemotePartySwitch.Info("[SettlementCharacterSwitchMenuFix] Deferred registered-character switch until the selection inquiry completed teardown; target=" + SafeHeroId(target) + "; settlement=" + SafeSettlementId(settlement) + ".");
 				return false;
 			}
 			catch (Exception ex)
 			{
-				RemotePartySwitch.Error("[SettlementCharacterSwitchMenuFix] Could not defer the settlement character-switch selection; allowing native dispatch", Unwrap(ex));
+				RemotePartySwitch.Error("[SettlementCharacterSwitchMenuFix] Could not defer the settlement character-switch selection; allowing normal dispatch", Unwrap(ex));
 				return true;
 			}
 		}
@@ -170,11 +170,11 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			{
 				_pendingTarget = target;
 				_pendingSettlement = settlement;
-				_refreshDelayTicks = 1;
+				_returnDelayTicks = 1;
 			}
 		}
 
-		private static void RefreshManagerMenuAfterSwitch()
+		private static void ReturnToSettlementAfterSwitch()
 		{
 			Hero target = _pendingTarget;
 			Settlement settlement = _pendingSettlement;
@@ -190,12 +190,12 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 				{
 					return;
 				}
-				GameMenu.SwitchToMenu(ManagerMenuId);
-				RemotePartySwitch.Info("[SettlementCharacterSwitchMenuFix] Reconstructed the shared-character manager after the deferred identity switch; target=" + SafeHeroId(target) + "; settlement=" + SafeSettlementId(settlement) + ".");
+				GameMenu.ExitToLast();
+				RemotePartySwitch.Info("[SettlementCharacterSwitchMenuFix] Completed the settlement character switch and returned through ManagerReturnHotfix; target=" + SafeHeroId(target) + "; settlement=" + SafeSettlementId(settlement) + ".");
 			}
 			catch (Exception ex)
 			{
-				RemotePartySwitch.Error("[SettlementCharacterSwitchMenuFix] Manager-menu reconstruction failed", Unwrap(ex));
+				RemotePartySwitch.Error("[SettlementCharacterSwitchMenuFix] Post-switch settlement return failed", Unwrap(ex));
 			}
 		}
 
@@ -268,7 +268,7 @@ namespace MultiCharacterCampaignTOR.IdentityGuard
 			_pendingTarget = null;
 			_pendingSettlement = null;
 			_dispatchDelayTicks = 0;
-			_refreshDelayTicks = 0;
+			_returnDelayTicks = 0;
 		}
 
 		private static void TryCancelSelection(int token, string source)
