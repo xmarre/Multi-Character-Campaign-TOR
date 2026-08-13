@@ -4,25 +4,25 @@ Multi-Character Campaign support for **Mount & Blade II: Bannerlord 1.3.15** and
 
 The mod lets one campaign contain multiple persistent playable heroes. Registered characters can remain in the main party, lead independent player-clan parties, or become the active player character through the campaign management interface.
 
-## v1.3.1
+## v1.3.2
 
-Version 1.3.1 fixes settlement character switching:
+Version 1.3.2 fixes a community-reported crash while entering a new campaign world with current Bannerlord.Harmony / Lib.Harmony 2.4.2.x:
 
-- registered-character selection is deferred until Bannerlord's inquiry has fully closed;
-- the identity switch no longer leaves the custom manager attached to stale settlement input state;
-- successful settlement switches automatically return to the exact native village, town, castle, camp, or settlement menu;
-- the **Wait here for some time** workaround is no longer required;
-- map/Ctrl+R switching and all v1.3.0 battle-intervention features remain unchanged.
+- Harmony bootstrap now resolves `Harmony` and `HarmonyMethod` through MCC's linked `0Harmony` reference instead of brittle assembly-qualified string lookup;
+- MCC's core Harmony compatibility patches no longer get silently skipped on the affected loader/runtime path;
+- the auxiliary TOR active-equipment refresh hook is guarded so a missing reflected TOR surface cannot abort campaign startup;
+- full-solution CI now covers both the existing Harmony 2.3.3 path and Harmony 2.4.2, plus the existing runtime patch-installation smoke test;
+- save data, character switching, party handling, finance, career selection, battle intervention, reinforcement, and campaign-map behavior are unchanged.
 
-Version 1.3.0 added granular 0–100% battle-alert strength thresholds and persistent player/AI reinforcement travel to active battles.
+Version 1.3.1 fixed settlement character switching, including deferred inquiry teardown and automatic return to the exact native settlement menu.
 
-See [`module/CHANGELOG-1.3.1.md`](module/CHANGELOG-1.3.1.md) for this release and [`module/CHANGELOG.md`](module/CHANGELOG.md) for earlier release history.
+See [`module/CHANGELOG-1.3.2.md`](module/CHANGELOG-1.3.2.md) for this release and [`module/CHANGELOG.md`](module/CHANGELOG.md) for earlier release history.
 
 ## Build
 
-The maintained fixes are contained in the `IdentityGuard` sidecar. CI builds the complete six-project solution against the Bannerlord 1.3.15 reference assemblies, validates the exact movement, interaction, AI-lock, strength-query, map-event, tooltip, finance, encounter, inquiry, and game-menu surfaces, and runs a .NET Framework/Harmony patch-installation smoke test.
+CI builds the complete six-project solution against the Bannerlord 1.3.15 reference assemblies, validates the exact movement, interaction, AI-lock, strength-query, map-event, tooltip, finance, encounter, inquiry, and game-menu surfaces, runs a .NET Framework/Harmony patch-installation smoke test, and separately verifies full-solution compatibility with Lib.Harmony 2.4.2.
 
-The remaining source is reconstructed development source for the v1.0.41 runtime baseline. Its provenance and limitations are documented in the source directories and `module/SOURCE_INFO.md`.
+Most of the core source is reconstructed development source for the v1.0.41 runtime baseline. Its provenance and limitations are documented in the source directories and `module/SOURCE_INFO.md`.
 
 ## Installation
 
