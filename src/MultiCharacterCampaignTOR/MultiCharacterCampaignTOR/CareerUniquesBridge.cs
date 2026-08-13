@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using HarmonyLib;
 
 namespace MultiCharacterCampaignTOR
 {
@@ -17,15 +18,37 @@ namespace MultiCharacterCampaignTOR
 
 		public static void LogStatus()
 		{
-			if (!_statusLogged)
+			if (_statusLogged)
 			{
-				Type type = Type.GetType("HarmonyLib.Harmony, 0Harmony");
-				Type type2 = Type.GetType("HarmonyLib.HarmonyMethod, 0Harmony");
-				object harmony = Activator.CreateInstance(type, "xmarre.multicharactercampaign.tor");
-				MethodInfo method = Type.GetType("TOR_Core.AbilitySystem.AbilityManagerMissionLogic, TOR_Core").GetMethod("OnBehaviorInitialize", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				return;
+			}
+			try
+			{
+				Type harmonyType = typeof(Harmony);
+				Type harmonyMethodType = typeof(HarmonyMethod);
+				object harmony = new Harmony("xmarre.multicharactercampaign.tor");
+				Type abilityManagerType = Type.GetType("TOR_Core.AbilitySystem.AbilityManagerMissionLogic, TOR_Core");
+				if (abilityManagerType == null)
+				{
+					Log.Warning("TOR AbilityManagerMissionLogic was not found; active-equipment refresh hook was not installed.");
+					_statusLogged = true;
+					return;
+				}
+				MethodInfo method = abilityManagerType.GetMethod("OnBehaviorInitialize", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 				MethodInfo method2 = typeof(TORBridge).GetMethod("RefreshAfterSwitch", BindingFlags.Static | BindingFlags.Public);
-				HarmonyBridge.PatchPrefix(harmony, type, type2, method, method2);
+				if (method == null || method2 == null)
+				{
+					Log.Warning("TOR active-equipment refresh patch surface was not found; refresh hook was not installed.");
+					_statusLogged = true;
+					return;
+				}
+				HarmonyBridge.PatchPrefix(harmony, harmonyType, harmonyMethodType, method, method2);
 				_statusLogged = true;
+				Log.Info("Installed TOR active-equipment refresh hook.");
+			}
+			catch (Exception ex)
+			{
+				Log.Error("Could not install TOR active-equipment refresh hook; campaign startup will continue without it", ex);
 			}
 		}
 
