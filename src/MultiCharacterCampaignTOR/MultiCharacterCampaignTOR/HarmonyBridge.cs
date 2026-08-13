@@ -25,14 +25,9 @@ namespace MultiCharacterCampaignTOR
 			}
 			try
 			{
-				Type type = Type.GetType("HarmonyLib.Harmony, 0Harmony");
-				Type type2 = Type.GetType("HarmonyLib.HarmonyMethod, 0Harmony");
-				if (type == null || type2 == null)
-				{
-					Log.Info("Harmony was not available yet; succession and campaign-shared quest patches will retry at campaign launch.");
-					return;
-				}
-				object harmony = Activator.CreateInstance(type, "xmarre.multicharactercampaign.tor");
+				Type type = typeof(Harmony);
+				Type type2 = typeof(HarmonyMethod);
+				object harmony = new Harmony("xmarre.multicharactercampaign.tor");
 				MethodInfo method = typeof(Campaign).GetMethod("OnGameOver", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 				MethodInfo method2 = typeof(HarmonyBridge).GetMethod("BeforeCampaignGameOver", BindingFlags.Static | BindingFlags.Public);
 				PatchPrefix(harmony, type, type2, method, method2);
