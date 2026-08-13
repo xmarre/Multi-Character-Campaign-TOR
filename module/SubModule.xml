@@ -3,7 +3,7 @@
   <Name value="Multi-Character Campaign - TOR" />
   <!-- Legacy module ID retained so existing saves still recognize the module. -->
   <Id value="TORSharedCharacterCampaign" />
-  <Version value="v1.3.1" />
+  <Version value="v1.3.2" />
   <DefaultModule value="false" />
   <ModuleCategory value="Singleplayer" />
   <DependedModules>
