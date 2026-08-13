@@ -1,0 +1,64 @@
+name: Harmony 2.4 compatibility
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore Bannerlord references
+        shell: pwsh
+        run: dotnet restore src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj
+
+      - name: Resolve Bannerlord and Harmony 2.4.2 references
+        shell: pwsh
+        run: |
+          $campaign = Get-ChildItem "$env:USERPROFILE\.nuget\packages" -Recurse -Filter TaleWorlds.CampaignSystem.dll | Select-Object -First 1
+          if (-not $campaign) { throw 'Bannerlord reference assemblies were not restored.' }
+          $bin = $campaign.Directory.FullName
+
+          dotnet new classlib -n HarmonyResolver242 -o "$env:RUNNER_TEMP\HarmonyResolver242" -f netstandard2.0
+          dotnet add "$env:RUNNER_TEMP\HarmonyResolver242\HarmonyResolver242.csproj" package Lib.Harmony --version 2.4.2
+          dotnet restore "$env:RUNNER_TEMP\HarmonyResolver242\HarmonyResolver242.csproj"
+          $harmony = Get-ChildItem "$env:USERPROFILE\.nuget\packages\lib.harmony\2.4.2" -Recurse -Filter 0Harmony.dll | Where-Object FullName -Match 'net472' | Select-Object -First 1
+          if (-not $harmony) { throw 'Lib.Harmony 2.4.2 0Harmony.dll was not resolved.' }
+
+          "BANNERLORD_BIN=$bin" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "HARMONY_DLL=$($harmony.FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build complete solution against Harmony 2.4.2
+        shell: pwsh
+        run: |
+          dotnet restore src/MultiCharacterCampaignTOR.CSharp.sln -p:BannerlordBin="$env:BANNERLORD_BIN" -p:HarmonyDll="$env:HARMONY_DLL" -p:RuntimeHarmonyDll="$env:HARMONY_DLL"
+          dotnet build src/MultiCharacterCampaignTOR.CSharp.sln -c Release --no-restore -p:BannerlordBin="$env:BANNERLORD_BIN" -p:HarmonyDll="$env:HARMONY_DLL" -p:RuntimeHarmonyDll="$env:HARMONY_DLL"
+
+      - name: Guard Harmony bootstrap against string-based type lookup regression
+        shell: pwsh
+        run: |
+          $harmonyBridge = Get-Content 'src/MultiCharacterCampaignTOR/MultiCharacterCampaignTOR/HarmonyBridge.cs' -Raw
+          $careerBridge = Get-Content 'src/MultiCharacterCampaignTOR/MultiCharacterCampaignTOR/CareerUniquesBridge.cs' -Raw
+          foreach ($source in @($harmonyBridge, $careerBridge)) {
+            if ($source -match 'Type\.GetType\("HarmonyLib\.(Harmony|HarmonyMethod), 0Harmony"\)') {
+              throw 'Harmony bootstrap regressed to assembly-name string lookup.'
+            }
+          }
+          if ($harmonyBridge -notmatch 'typeof\(Harmony\)' -or $harmonyBridge -notmatch 'typeof\(HarmonyMethod\)') {
+            throw 'HarmonyBridge does not bind Harmony types through the linked assembly.'
+          }
+          if ($careerBridge -notmatch 'typeof\(Harmony\)' -or $careerBridge -notmatch 'typeof\(HarmonyMethod\)') {
+            throw 'CareerUniquesBridge does not bind Harmony types through the linked assembly.'
+          }
+          if ($careerBridge -notmatch 'campaign startup will continue without it') {
+            throw 'CareerUniquesBridge startup-failure containment is missing.'
+          }
