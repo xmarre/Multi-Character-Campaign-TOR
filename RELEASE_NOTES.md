@@ -1,38 +1,65 @@
-# Multi-Character Campaign - TOR v1.3.2
+# Multi-Character Campaign - TOR v1.3.3
 
-Released: 13 August 2026.
+Released: 16 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
-Validated crash-fix merge: `0b57fb6311cb200c081dc4a689f6a6a95aea348d`.
+## AI-controlled shared heroes can use their TOR career abilities
 
-## Fixed new-campaign/session-launch crash with Harmony 2.4.2
+Registered MCC heroes now retain and use their own TOR career ability while another shared character is player-controlled.
 
-Two independent community crash reports reproduced the same failure while entering a new campaign world on Bannerlord 1.3.15. Both reports had Bannerlord.Harmony / `0Harmony` 2.4.2 loaded and failed from `MultiCharacterCampaignTOR.CareerUniquesBridge.LogStatus()` with `ArgumentNullException: type` at `Activator.CreateInstance(Type, ...)`.
+The compatibility layer now:
 
-MCC was resolving `HarmonyLib.Harmony` and `HarmonyLib.HarmonyMethod` with assembly-qualified `Type.GetType("..., 0Harmony")` string lookups. On the affected loader/runtime path those lookups returned `null` even though Harmony was loaded. `HarmonyBridge.TryInstall()` silently skipped MCC's main Harmony compatibility patches when that happened, then `CareerUniquesBridge.LogStatus()` repeated the same lookup without a null guard and aborted `OnSessionLaunched`.
+- creates the correct TOR `CareerAbility` for each registered shared AI hero;
+- keeps career ownership and career-choice lookups bound to that hero instead of the current `Hero.MainHero`;
+- allows TOR's existing Wizard AI to evaluate and cast the ability while preserving normal cooldown, charge, weapon/mount, routed/dead, and mission-limit checks;
+- credits direct damage dealt, damage taken, and kill charge to the correct AI hero's career ability;
+- rebuilds TOR casting behavior state across AI/player controller handoffs so an AI cannot keep autonomously casting after MCC gives that hero to the player;
+- restores the normal player ability ordering when the hero becomes player-controlled.
 
-Version 1.3.2 now:
+TOR does not provide a native Wizard-AI mapping for `CareerAbilityEffect`, so v1.3.3 also handles the career-specific cases that cannot safely use TOR's generic missile fallback. This includes local/self career abilities, Fey Paths, Greater Harbinger, targeted ground abilities, and moving career projectiles. AI Grail Damsel teleportation is also prevented from fading the actual player's camera.
 
-- resolves `Harmony` and `HarmonyMethod` through MCC's existing linked `0Harmony` reference instead of assembly-name string lookup;
-- constructs the Harmony instance from that linked type, allowing MCC's core Harmony compatibility patches to install on the affected runtime path;
-- guards the auxiliary TOR `AbilityManagerMissionLogic.OnBehaviorInitialize` refresh hook against missing or renamed reflected surfaces;
-- contains unexpected failures from that optional refresh hook so they are logged without aborting campaign startup;
-- keeps the existing optional TOR Career Uniques runtime refresh behavior unchanged when that mod is installed.
+## Fixed remaining Harmony-loader regressions from v1.3.2
 
-The supplied current `TOR_Core` surface still contains `TOR_Core.AbilitySystem.AbilityManagerMissionLogic.OnBehaviorInitialize`, so a missing ToR method was ruled out as the reported crash source.
+The v1.3.2 core startup-crash fix was correct, but community retesting on the affected loader path exposed older assembly-qualified Harmony lookups in reconstructed auxiliary MCC components.
+
+These stale lookups affected:
+
+- `CareerAbilityRepair`, producing `Harmony 0Harmony assembly is unavailable` in the log;
+- IdentityGuard initialization before `CampaignMapHotkey`, leaving Ctrl+R unavailable;
+- the NativeCreation bridge used by `Create a new playable character`.
+
+RuntimeCompatibility is the first MCC submodule loaded and already links the runtime `0Harmony` assembly directly. It now establishes that linked assembly as the resolver for the legacy auxiliary lookup shape before later MCC sidecars initialize. Resolver validation is failure-contained and cannot abort campaign startup.
+
+This fixes the common loader-context root cause for CareerAbilityRepair, Ctrl+R, NativeCreation, and other reconstructed auxiliary patch installers that use the same legacy lookup form.
+
+## Fixed stale TOR career buttons after character switches
+
+TOR registers the party-screen career-button delegates when its `PartyCharacterVMExtension` is constructed. MCC can switch `Hero.MainHero` while the same party-screen VM remains alive, leaving the button handler and displayed state bound to the previous character.
+
+Version 1.3.3 now rebinds TOR's current career button on MCC's existing `TORBridge.RefreshAfterSwitch()` path and refreshes an already-open party screen through TOR's own `PartyVMExtension.ViewModelInstance.RefreshValues()` mechanism.
+
+This covers both reported cases:
+
+- Mercenary -> Waywatcher no longer retains the previous Mercenary button state;
+- a character whose career has no TOR party button, such as Grey Lord, no longer prevents a later Waywatcher from receiving the Waywatcher button after switching.
 
 ## Save, behavior, and performance scope
 
-- No save values or migration were added.
-- Existing saves remain compatible.
-- Character switching, remote-party transactions, party ownership, finance, career selection, battle intervention, reinforcement travel, settlement handling, and campaign-map behavior are unchanged.
-- No recurring scan or campaign-tick work was added.
+- Existing saves remain compatible; no save migration was added.
+- No recurring campaign-map scan, global hero scan, global party scan, or new campaign tick work was added.
+- The Harmony compatibility resolver runs once during RuntimeCompatibility initialization.
+- Career-button rebinding runs only on MCC's existing TOR identity/career refresh path.
+- AI career support is mission/event driven and limited to registered MCC shared heroes.
 
 ## Validation
 
-- Existing Bannerlord 1.3.15 full build/API validation passed.
-- Existing .NET Framework/Harmony runtime patch-installation smoke test passed.
-- A new full-solution compatibility build against Lib.Harmony 2.4.2 passed, including a regression guard that rejects the brittle string-based Harmony bootstrap.
-- The existing build path against Lib.Harmony 2.3.3 remains covered, preserving the older supported compile/runtime surface.
-- The maintainer installation does not reproduce this loader-specific crash, so validation is based on the two matching community crash stacks, the exact failing code path, and dual-Harmony CI coverage. Community confirmation on an affected installation remains useful.
+The release is gated by:
+
+- Bannerlord 1.3.15 full build/API validation;
+- full-solution Lib.Harmony 2.4.2 compatibility build;
+- the existing Lib.Harmony 2.3.3 build/runtime surface;
+- runtime patch-installation smoke coverage;
+- an expanded Harmony regression guard covering the first-loaded auxiliary resolver/load-order invariant.
+
+The affected community loader path remains the most valuable runtime confirmation for Ctrl+R, in-campaign character creation, and the auxiliary Harmony resolution fix.
