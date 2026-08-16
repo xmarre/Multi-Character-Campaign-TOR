@@ -17,6 +17,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
 			AICareerAbilitySupport.Install();
 			AICareerAbilityActivationContext.Install();
 			AICareerAbilityTransitionGuard.Install();
+			AICareerAbilityBehaviorBridge.Install();
 			RuntimeRepair.Install();
 		}
 
@@ -27,6 +28,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
 			AICareerAbilitySupport.Install();
 			AICareerAbilityActivationContext.Install();
 			AICareerAbilityTransitionGuard.Install();
+			AICareerAbilityBehaviorBridge.Install();
 			RuntimeRepair.Install();
 		}
 	}
