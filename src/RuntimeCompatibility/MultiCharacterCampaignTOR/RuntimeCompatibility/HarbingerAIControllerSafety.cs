@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using HarmonyLib;
+using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
 
 namespace MultiCharacterCampaignTOR.RuntimeCompatibility
@@ -100,11 +101,11 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
                 // AI hero both agents remain AI-controlled; the actual player's Agent.Main is untouched.
                 if (caster.IsActive())
                 {
-                    caster.Controller = Agent.ControllerType.AI;
+                    caster.Controller = AgentControllerType.AI;
                 }
                 if (champion != null && champion.IsActive())
                 {
-                    champion.Controller = Agent.ControllerType.AI;
+                    champion.Controller = AgentControllerType.AI;
                     if (wieldChampion)
                     {
                         champion.WieldInitialWeapons();
