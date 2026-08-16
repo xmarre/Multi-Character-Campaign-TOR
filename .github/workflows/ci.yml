@@ -130,15 +130,24 @@ jobs:
           }
 
           $runtimeSubmodule = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/SubModule.cs' -Raw
-          foreach ($surface in @('HarmonyAssemblyResolver.Install()','CareerAbilityRepair.Install()','CareerButtonRefreshRepair.Install()','AICareerAbilitySupport.Install()','AICareerAbilityActivationContext.Install()','AICareerAbilityTransitionGuard.Install()','HarbingerAIControllerSafety.Install()','CompanionDialogueEligibilityRepair.Install()')) {
+          foreach ($surface in @('HarmonyAssemblyResolver.Install()','LinkedCareerAbilityRepairInstaller.Install()','CareerButtonRefreshRepair.Install()','AICareerAbilitySupport.Install()','AICareerAbilityActivationContext.Install()','AICareerAbilityTransitionGuard.Install()','HarbingerAIControllerSafety.Install()','CompanionDialogueEligibilityRepair.Install()')) {
             if ($runtimeSubmodule -notmatch [regex]::Escape($surface)) { throw "Missing v1.3.4 runtime compatibility installer surface $surface" }
           }
+          if ($runtimeSubmodule -match 'CareerAbilityRepair\.Install\(\);') {
+            throw 'The recovered loader-sensitive CareerAbilityRepair.Install() must not be called.'
+          }
           $gameStart = $runtimeSubmodule.IndexOf('OnGameStart')
-          $careerRepair = $runtimeSubmodule.IndexOf('CareerAbilityRepair.Install();')
+          $careerRepair = $runtimeSubmodule.IndexOf('LinkedCareerAbilityRepairInstaller.Install();')
           $runtimeRepair = $runtimeSubmodule.IndexOf('RuntimeRepair.Install();')
           if ($gameStart -lt 0 -or $careerRepair -lt $gameStart -or $runtimeRepair -lt $gameStart) {
-            throw 'Legacy runtime/campaign repairs must install at OnGameStart rather than early OnSubModuleLoad.'
+            throw 'Recovered runtime/campaign repairs must install at OnGameStart rather than early OnSubModuleLoad.'
           }
+
+          $linkedCareerRepair = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/LinkedCareerAbilityRepairInstaller.cs' -Raw
+          foreach ($surface in @('typeof(CareerAbilityRepair)','new Harmony(','new HarmonyMethod(','ResolveAndCacheRuntimeMembers','_installed')) {
+            if ($linkedCareerRepair -notmatch [regex]::Escape($surface)) { throw "Missing linked career-repair installer surface $surface" }
+          }
+          if ($linkedCareerRepair -match 'Type\.GetType\("HarmonyLib\.(Harmony|HarmonyMethod), 0Harmony"') { throw 'Linked career repair installer regressed to loader-sensitive Harmony lookup.' }
 
           $resolver = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/HarmonyAssemblyResolver.cs' -Raw
           foreach ($surface in @('typeof(Harmony).Assembly','AssemblyResolve','HarmonyLib.Harmony, 0Harmony','HarmonyLib.HarmonyMethod, 0Harmony')) {
