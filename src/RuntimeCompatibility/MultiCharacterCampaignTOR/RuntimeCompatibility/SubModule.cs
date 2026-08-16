@@ -14,24 +14,32 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
 		{
 			base.OnSubModuleLoad();
 			HarmonyAssemblyResolver.Install();
-			CareerAbilityRepair.Install();
 			CareerButtonRefreshRepair.Install();
 			AICareerAbilitySupport.Install();
 			AICareerAbilityActivationContext.Install();
 			AICareerAbilityTransitionGuard.Install();
-			RuntimeRepair.Install();
+			HarbingerAIControllerSafety.Install();
+			CompanionDialogueEligibilityRepair.Install();
 		}
 
 		protected override void OnGameStart(Game game, IGameStarter gameStarter)
 		{
 			base.OnGameStart(game, gameStarter);
 			HarmonyAssemblyResolver.Install();
+
+			// The affected Harmony 2.4 loader can reject assembly-qualified runtime lookup during
+			// OnSubModuleLoad even though the same lookup is valid once GameStart is reached. These two
+			// reconstructed legacy repairs need campaign/runtime types and therefore belong here, not in
+			// the early module-loader phase.
 			CareerAbilityRepair.Install();
+			RuntimeRepair.Install();
+
 			CareerButtonRefreshRepair.Install();
 			AICareerAbilitySupport.Install();
 			AICareerAbilityActivationContext.Install();
 			AICareerAbilityTransitionGuard.Install();
-			RuntimeRepair.Install();
+			HarbingerAIControllerSafety.Install();
+			CompanionDialogueEligibilityRepair.Install();
 		}
 	}
 }
