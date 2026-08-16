@@ -48,9 +48,11 @@ jobs:
         run: |
           $harmonyBridge = Get-Content 'src/MultiCharacterCampaignTOR/MultiCharacterCampaignTOR/HarmonyBridge.cs' -Raw
           $careerBridge = Get-Content 'src/MultiCharacterCampaignTOR/MultiCharacterCampaignTOR/CareerUniquesBridge.cs' -Raw
-          foreach ($source in @($harmonyBridge, $careerBridge)) {
-            if ($source -match 'Type\.GetType\("HarmonyLib\.(Harmony|HarmonyMethod), 0Harmony"\)') {
-              throw 'Core Harmony bootstrap regressed to assembly-name string lookup.'
+          $nativeCreation = Get-Content 'src/NativeCreation/MultiCharacterCampaignTOR/NativeCreation/NativeCharacterCreation.cs' -Raw
+
+          foreach ($source in @($harmonyBridge, $careerBridge, $nativeCreation)) {
+            if ($source -match 'Type\.GetType\("HarmonyLib\.(Harmony|HarmonyMethod), 0Harmony"') {
+              throw 'A directly controlled Harmony bootstrap regressed to assembly-qualified string lookup.'
             }
           }
           if ($harmonyBridge -notmatch 'typeof\(Harmony\)' -or $harmonyBridge -notmatch 'typeof\(HarmonyMethod\)') {
@@ -58,6 +60,9 @@ jobs:
           }
           if ($careerBridge -notmatch 'typeof\(Harmony\)' -or $careerBridge -notmatch 'typeof\(HarmonyMethod\)') {
             throw 'CareerUniquesBridge does not bind Harmony types through the linked assembly.'
+          }
+          if ($nativeCreation -notmatch 'typeof\(Harmony\)' -or $nativeCreation -notmatch 'typeof\(HarmonyMethod\)' -or $nativeCreation -notmatch 'new Harmony\(HarmonyId\)') {
+            throw 'NativeCreation does not bind Harmony through its linked 0Harmony reference.'
           }
           if ($careerBridge -notmatch 'campaign startup will continue without it') {
             throw 'CareerUniquesBridge startup-failure containment is missing.'
@@ -73,13 +78,24 @@ jobs:
           if ($resolver -notmatch 'AssemblyResolve' -or $resolver -notmatch 'HarmonyLib\.Harmony, 0Harmony' -or $resolver -notmatch 'HarmonyLib\.HarmonyMethod, 0Harmony') {
             throw 'Auxiliary Harmony resolver does not validate the legacy sidecar lookup shape.'
           }
-          if ($runtimeSubmodule -notmatch 'HarmonyAssemblyResolver\.Install\(\);\s*CareerAbilityRepair\.Install\(\);') {
-            throw 'Runtime compatibility must install the Harmony resolver before CareerAbilityRepair.'
+
+          $loadIndex = $runtimeSubmodule.IndexOf('OnSubModuleLoad')
+          $gameStartIndex = $runtimeSubmodule.IndexOf('OnGameStart')
+          $careerRepairIndex = $runtimeSubmodule.IndexOf('CareerAbilityRepair.Install();')
+          $runtimeRepairIndex = $runtimeSubmodule.IndexOf('RuntimeRepair.Install();')
+          if ($loadIndex -lt 0 -or $gameStartIndex -lt 0 -or $careerRepairIndex -lt 0 -or $runtimeRepairIndex -lt 0) {
+            throw 'RuntimeCompatibility repair lifecycle surfaces are missing.'
+          }
+          if ($careerRepairIndex -lt $gameStartIndex -or $runtimeRepairIndex -lt $gameStartIndex) {
+            throw 'Legacy runtime/campaign repairs must not install during early OnSubModuleLoad on affected Harmony 2.4 loader paths.'
+          }
+          if ($runtimeSubmodule -notmatch 'HarbingerAIControllerSafety\.Install\(\);' -or $runtimeSubmodule -notmatch 'CompanionDialogueEligibilityRepair\.Install\(\);') {
+            throw 'v1.3.4 Harbinger/dialogue compatibility installers are missing.'
           }
 
           $runtimeIndex = $moduleXml.IndexOf('MultiCharacterCampaignTOR.RuntimeCompatibility.v140.dll')
           $coreIndex = $moduleXml.IndexOf('MultiCharacterCampaignTOR.dll')
           $identityIndex = $moduleXml.IndexOf('MultiCharacterCampaignTOR.IdentityGuard.v140.dll')
           if ($runtimeIndex -lt 0 -or $coreIndex -lt 0 -or $identityIndex -lt 0 -or $runtimeIndex -gt $coreIndex -or $runtimeIndex -gt $identityIndex) {
-            throw 'RuntimeCompatibility must remain the first MCC submodule so the Harmony resolver is active before legacy sidecars.'
+            throw 'RuntimeCompatibility must remain the first MCC submodule so its compatibility guards can initialize before later MCC sidecars.'
           }
