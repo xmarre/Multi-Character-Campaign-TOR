@@ -10,7 +10,9 @@ Community retesting of v1.3.3 showed that campaign startup, Ctrl+R, career butto
 
 The remaining NativeCreation wrapper still resolved `Harmony` and `HarmonyMethod` through assembly-qualified `Type.GetType("..., 0Harmony")` calls when the creation flow was first opened. Version 1.3.4 removes that dependency: NativeCreation now references the runtime `0Harmony` assembly directly and binds `Harmony` / `HarmonyMethod` through the linked types, matching the proven core bootstrap fix.
 
-The same tester's log also showed a clear lifecycle distinction: the reconstructed `CareerAbilityRepair` failed when attempted during early `OnSubModuleLoad`, then installed successfully later during `OnGameStart` on the same installation. Those reconstructed campaign/runtime repairs are therefore no longer installed during the early module-loader phase. They now install at `OnGameStart`, before campaign missions can use them.
+The tester's log also exposed the recovered `CareerAbilityRepair.Install()` bootstrap still using the same loader-sensitive lookup. Version 1.3.4 no longer calls that recovered installer. A new linked-Harmony installer reuses the established career-repair callbacks and patch surfaces while constructing every Harmony patch through the RuntimeCompatibility assembly's direct `0Harmony` reference. The recovered campaign/runtime repairs are installed at `OnGameStart`, not during the early module-loader phase.
+
+This removes the reported `Harmony 0Harmony assembly is unavailable` path from both NativeCreation and the active-player CareerAbility repair code that MCC actually invokes.
 
 ## Fixed AI Necromancer Greater Harbinger stealing player control
 
@@ -38,7 +40,7 @@ The previously reported TOR party-screen career-button issue is also confirmed f
 
 - Existing saves remain compatible; no save migration is required.
 - No recurring campaign-map scan, global hero scan, global party scan, or recurring campaign reconciliation was added.
-- NativeCreation's Harmony binding is resolved directly from its linked dependency rather than through repeated runtime lookup.
+- NativeCreation and the active-player career repair now use linked Harmony bootstraps instead of loader-sensitive assembly-qualified Harmony lookup.
 - The Greater Harbinger compatibility guard runs only on TOR's existing controller-transition methods for that ability.
 - Companion dialogue eligibility is evaluated only when Bannerlord evaluates the conversation line.
 
@@ -50,6 +52,6 @@ The release is gated by:
 - full-solution Lib.Harmony 2.4.2 compatibility build;
 - the existing Lib.Harmony 2.3.3 build/runtime surface;
 - runtime patch-installation smoke coverage;
-- regression guards rejecting the loader-sensitive Harmony lookup from NativeCreation and enforcing the corrected runtime-repair lifecycle.
+- regression guards rejecting the loader-sensitive Harmony lookup from NativeCreation and from the invoked CareerAbility repair bootstrap, and enforcing the corrected runtime-repair lifecycle.
 
 The affected community installation remains the authoritative runtime confirmation for the loader-specific in-campaign creation fix, while the automated gates verify the exact build, patch, API, and packaging surfaces used by the release.
