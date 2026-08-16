@@ -13,22 +13,24 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
 		protected override void OnSubModuleLoad()
 		{
 			base.OnSubModuleLoad();
+			HarmonyAssemblyResolver.Install();
 			CareerAbilityRepair.Install();
+			CareerButtonRefreshRepair.Install();
 			AICareerAbilitySupport.Install();
 			AICareerAbilityActivationContext.Install();
 			AICareerAbilityTransitionGuard.Install();
-			AICareerAbilityBehaviorBridge.Install();
 			RuntimeRepair.Install();
 		}
 
 		protected override void OnGameStart(Game game, IGameStarter gameStarter)
 		{
 			base.OnGameStart(game, gameStarter);
+			HarmonyAssemblyResolver.Install();
 			CareerAbilityRepair.Install();
+			CareerButtonRefreshRepair.Install();
 			AICareerAbilitySupport.Install();
 			AICareerAbilityActivationContext.Install();
 			AICareerAbilityTransitionGuard.Install();
-			AICareerAbilityBehaviorBridge.Install();
 			RuntimeRepair.Install();
 		}
 	}
