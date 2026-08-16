@@ -1,56 +1,46 @@
-# Multi-Character Campaign - TOR v1.3.3
+# Multi-Character Campaign - TOR v1.3.4
 
 Released: 16 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
-## AI-controlled shared heroes can use their TOR career abilities
+## Fixed in-campaign character creation on the affected Harmony 2.4 loader path
 
-Registered MCC heroes now retain and use their own TOR career ability while another shared character is player-controlled.
+Community retesting of v1.3.3 showed that campaign startup, Ctrl+R, career buttons, and AI career abilities were working, but `Create a new playable character` could still fail on the same loader/runtime family that originally exposed the Harmony 2.4 startup problem.
 
-The compatibility layer now:
+The remaining NativeCreation wrapper still resolved `Harmony` and `HarmonyMethod` through assembly-qualified `Type.GetType("..., 0Harmony")` calls when the creation flow was first opened. Version 1.3.4 removes that dependency: NativeCreation now references the runtime `0Harmony` assembly directly and binds `Harmony` / `HarmonyMethod` through the linked types, matching the proven core bootstrap fix.
 
-- creates the correct TOR `CareerAbility` for each registered shared AI hero;
-- keeps career ownership and career-choice lookups bound to that hero instead of the current `Hero.MainHero`;
-- allows TOR's existing Wizard AI to evaluate and cast the ability while preserving normal cooldown, charge, weapon/mount, routed/dead, and mission-limit checks;
-- credits direct damage dealt, damage taken, and kill charge to the correct AI hero's career ability;
-- rebuilds TOR casting behavior state across AI/player controller handoffs so an AI cannot keep autonomously casting after MCC gives that hero to the player;
-- restores the normal player ability ordering when the hero becomes player-controlled.
+The same tester's log also showed a clear lifecycle distinction: the reconstructed `CareerAbilityRepair` failed when attempted during early `OnSubModuleLoad`, then installed successfully later during `OnGameStart` on the same installation. Those reconstructed campaign/runtime repairs are therefore no longer installed during the early module-loader phase. They now install at `OnGameStart`, before campaign missions can use them.
 
-TOR does not provide a native Wizard-AI mapping for `CareerAbilityEffect`, so v1.3.3 also handles the career-specific cases that cannot safely use TOR's generic missile fallback. This includes local/self career abilities, Fey Paths, Greater Harbinger, targeted ground abilities, and moving career projectiles. AI Grail Damsel teleportation is also prevented from fading the actual player's camera.
+## Fixed AI Necromancer Greater Harbinger stealing player control
 
-## Fixed remaining Harmony-loader regressions from v1.3.2
+The v1.3.3 AI-career feature correctly allowed registered shared Necromancers to use Greater Harbinger, but TOR's native `SummonChampionScript` is written for the player career path. Its controller transition explicitly transfers player control to the summoned Harbinger and fades the player camera.
 
-The v1.3.2 core startup-crash fix was correct, but community retesting on the affected loader path exposed older assembly-qualified Harmony lookups in reconstructed auxiliary MCC components.
+For a registered shared hero that is currently AI-controlled, v1.3.4 now suppresses that player-only controller transition. The AI Necromancer and summoned Harbinger remain AI-controlled and the actual player's controlled agent and camera are left untouched.
 
-These stale lookups affected:
+The native Greater Harbinger controller-switching behavior remains unchanged when the active player character casts it.
 
-- `CareerAbilityRepair`, producing `Harmony 0Harmony assembly is unavailable` in the log;
-- IdentityGuard initialization before `CampaignMapHotkey`, leaving Ctrl+R unavailable;
-- the NativeCreation bridge used by `Create a new playable character`.
+## Fixed companion activation through dialogue
 
-RuntimeCompatibility is the first MCC submodule loaded and already links the runtime `0Harmony` assembly directly. It now establishes that linked assembly as the resolver for the legacy auxiliary lookup shape before later MCC sidecars initialize. Resolver validation is failure-contained and cannot abort campaign startup.
+The management-menu companion activation path already worked, but the MCC dialogue option used a reconstructed combination of `CompanionOf` and party membership that did not match Bannerlord 1.3.15's own companion-dialogue eligibility rules on the affected setup.
 
-This fixes the common loader-context root cause for CareerAbilityRepair, Ctrl+R, NativeCreation, and other reconstructed auxiliary patch installers that use the same legacy lookup form.
+For unregistered companions, MCC now uses Bannerlord's native `HeroHelper.IsCompanionInPlayerParty(...)` predicate. Already registered shared heroes retain MCC's existing physical MainParty requirement for dialogue switching.
 
-## Fixed stale TOR career buttons after character switches
+This restores the `[Multi-Character Campaign] Take control of this character.` dialogue route without changing the menu-based activation path.
 
-TOR registers the party-screen career-button delegates when its `PartyCharacterVMExtension` is constructed. MCC can switch `Hero.MainHero` while the same party-screen VM remains alive, leaving the button handler and displayed state bound to the previous character.
+## Confirmed v1.3.3 AI career support
 
-Version 1.3.3 now rebinds TOR's current career button on MCC's existing `TORBridge.RefreshAfterSwitch()` path and refreshes an already-open party screen through TOR's own `PartyVMExtension.ViewModelInstance.RefreshValues()` mechanism.
+Community testing of v1.3.3 covered the available TOR career abilities and confirmed that AI-controlled shared characters retain and use their career abilities successfully across the tested careers. The Greater Harbinger controller transfer above was the one identified player-control integration issue from that test pass.
 
-This covers both reported cases:
-
-- Mercenary -> Waywatcher no longer retains the previous Mercenary button state;
-- a character whose career has no TOR party button, such as Grey Lord, no longer prevents a later Waywatcher from receiving the Waywatcher button after switching.
+The previously reported TOR party-screen career-button issue is also confirmed fixed by the same tester.
 
 ## Save, behavior, and performance scope
 
-- Existing saves remain compatible; no save migration was added.
-- No recurring campaign-map scan, global hero scan, global party scan, or new campaign tick work was added.
-- The Harmony compatibility resolver runs once during RuntimeCompatibility initialization.
-- Career-button rebinding runs only on MCC's existing TOR identity/career refresh path.
-- AI career support is mission/event driven and limited to registered MCC shared heroes.
+- Existing saves remain compatible; no save migration is required.
+- No recurring campaign-map scan, global hero scan, global party scan, or recurring campaign reconciliation was added.
+- NativeCreation's Harmony binding is resolved directly from its linked dependency rather than through repeated runtime lookup.
+- The Greater Harbinger compatibility guard runs only on TOR's existing controller-transition methods for that ability.
+- Companion dialogue eligibility is evaluated only when Bannerlord evaluates the conversation line.
 
 ## Validation
 
@@ -60,6 +50,6 @@ The release is gated by:
 - full-solution Lib.Harmony 2.4.2 compatibility build;
 - the existing Lib.Harmony 2.3.3 build/runtime surface;
 - runtime patch-installation smoke coverage;
-- an expanded Harmony regression guard covering the first-loaded auxiliary resolver/load-order invariant.
+- regression guards rejecting the loader-sensitive Harmony lookup from NativeCreation and enforcing the corrected runtime-repair lifecycle.
 
-The affected community loader path remains the most valuable runtime confirmation for Ctrl+R, in-campaign character creation, and the auxiliary Harmony resolution fix.
+The affected community installation remains the authoritative runtime confirmation for the loader-specific in-campaign creation fix, while the automated gates verify the exact build, patch, API, and packaging surfaces used by the release.
