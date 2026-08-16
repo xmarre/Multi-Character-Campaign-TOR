@@ -7,9 +7,9 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
 {
     /// <summary>
     /// TOR's Greater Harbinger career script is designed for the player: when the summon appears it
-    /// unconditionally transfers AgentControllerType.Player to the champion. Registered MCC heroes can
-    /// now cast that career while AI-controlled, so that native player-only controller swap must be
-    /// suppressed for the AI path or a remote Necromancer steals the actual player's camera/control.
+    /// unconditionally transfers player control to the champion. Registered MCC heroes can now cast
+    /// that career while AI-controlled, so the native player-only controller swap must be suppressed
+    /// for the AI path or a remote Necromancer steals the actual player's camera/control.
     /// </summary>
     internal static class HarbingerAIControllerSafety
     {
@@ -100,11 +100,11 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
                 // AI hero both agents remain AI-controlled; the actual player's Agent.Main is untouched.
                 if (caster.IsActive())
                 {
-                    caster.Controller = AgentControllerType.AI;
+                    caster.Controller = Agent.ControllerType.AI;
                 }
                 if (champion != null && champion.IsActive())
                 {
-                    champion.Controller = AgentControllerType.AI;
+                    champion.Controller = Agent.ControllerType.AI;
                     if (wieldChampion)
                     {
                         champion.WieldInitialWeapons();
@@ -117,7 +117,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
             catch (Exception ex)
             {
                 // Once we know this is the registered-AI path, fail closed: running TOR's original method
-                // is worse than losing this controller transition because it explicitly steals Player control.
+                // is worse than losing this controller transition because it explicitly steals player control.
                 if (caster != null && IsRegisteredSharedHeroAgentSafe(caster))
                 {
                     Log("Greater Harbinger AI normalization failed closed: " + Unwrap(ex));
