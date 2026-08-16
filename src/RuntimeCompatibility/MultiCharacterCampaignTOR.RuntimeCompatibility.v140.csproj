@@ -9,10 +9,12 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="TaleWorlds.Core"><HintPath>$(BannerlordBin)\TaleWorlds.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.CampaignSystem"><HintPath>$(BannerlordBin)\TaleWorlds.CampaignSystem.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="TaleWorlds.DotNet"><HintPath>$(BannerlordBin)\TaleWorlds.DotNet.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="TaleWorlds.Engine"><HintPath>$(BannerlordBin)\TaleWorlds.Engine.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="TaleWorlds.Library"><HintPath>$(BannerlordBin)\TaleWorlds.Library.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="TaleWorlds.MountAndBlade"><HintPath>$(BannerlordBin)\TaleWorlds.MountAndBlade.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.ObjectSystem"><HintPath>$(BannerlordBin)\TaleWorlds.ObjectSystem.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="0Harmony"><HintPath>$(RuntimeHarmonyDll)</HintPath><Private>false</Private></Reference>
     <Compile Remove="MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.cs" />
     <None Include="MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.cs" />

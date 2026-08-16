@@ -95,6 +95,10 @@ jobs:
           $encounterModel = $asm.GetType('TaleWorlds.CampaignSystem.ComponentInterfaces.EncounterModel', $true)
           if (-not $encounterModel.GetProperty('NeededMaximumDistanceForEncounteringMobileParty', $flags)) { throw 'EncounterModel encounter-distance property is unavailable.' }
 
+          $heroHelper = $asm.GetType('Helpers.HeroHelper', $true)
+          $companionPredicate = @($heroHelper.GetMethods($flags) | Where-Object { $_.Name -eq 'IsCompanionInPlayerParty' -and $_.GetParameters().Length -eq 1 })
+          if (-not $companionPredicate) { throw 'HeroHelper.IsCompanionInPlayerParty/1 is unavailable.' }
+
           $library = [System.Reflection.Assembly]::LoadFrom($env:LIBRARY_DLL)
           $information = $library.GetType('TaleWorlds.Library.InformationManager', $true)
           foreach ($spec in @(@('ShowTooltip',2),@('HideTooltip',0),@('ShowTextInquiry',3))) {
@@ -104,7 +108,7 @@ jobs:
           $textInquiry = $library.GetType('TaleWorlds.Library.TextInquiryData', $true)
           if (-not @($textInquiry.GetConstructors($flags) | Where-Object { $_.GetParameters().Length -ge 10 })) { throw 'TextInquiryData configurable-input constructor is unavailable.' }
 
-      - name: Inspect MCC v1.3.3 patch surfaces
+      - name: Inspect MCC v1.3.4 patch surfaces
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -120,22 +124,50 @@ jobs:
           foreach ($surface in @('DispatchSelection','BeforeDispatchSelection','CurrentSettlement','GameMenu.ExitToLast','ReturnToSettlementAfterSwitch','Tick()')) {
             if ($settlementSwitch -notmatch [regex]::Escape($surface)) { throw "Missing settlement-switch surface $surface" }
           }
-          $submodule = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/SubModule.cs' -Raw
+          $identitySubmodule = Get-Content 'src/IdentityGuard/MultiCharacterCampaignTOR/IdentityGuard/SubModule.cs' -Raw
           foreach ($surface in @('BattleInterventionThresholdPolicy.Install()','BattleReinforcementOrderGuard.Install()','BattleReinforcementOrderGuard.Tick(dt)','SettlementCharacterSwitchMenuFix.Install()','SettlementCharacterSwitchMenuFix.Tick()')) {
-            if ($submodule -notmatch [regex]::Escape($surface)) { throw "Missing established installer/tick surface $surface" }
+            if ($identitySubmodule -notmatch [regex]::Escape($surface)) { throw "Missing established installer/tick surface $surface" }
           }
 
           $runtimeSubmodule = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/SubModule.cs' -Raw
-          foreach ($surface in @('HarmonyAssemblyResolver.Install()','CareerAbilityRepair.Install()','CareerButtonRefreshRepair.Install()','AICareerAbilitySupport.Install()','AICareerAbilityActivationContext.Install()','AICareerAbilityTransitionGuard.Install()')) {
-            if ($runtimeSubmodule -notmatch [regex]::Escape($surface)) { throw "Missing v1.3.3 runtime compatibility installer surface $surface" }
+          foreach ($surface in @('HarmonyAssemblyResolver.Install()','LinkedCareerAbilityRepairInstaller.Install()','CareerButtonRefreshRepair.Install()','AICareerAbilitySupport.Install()','AICareerAbilityActivationContext.Install()','AICareerAbilityTransitionGuard.Install()','HarbingerAIControllerSafety.Install()','CompanionDialogueEligibilityRepair.Install()')) {
+            if ($runtimeSubmodule -notmatch [regex]::Escape($surface)) { throw "Missing v1.3.4 runtime compatibility installer surface $surface" }
           }
-          if ($runtimeSubmodule -notmatch 'HarmonyAssemblyResolver\.Install\(\);\s*CareerAbilityRepair\.Install\(\);') {
-            throw 'Harmony resolver must initialize before CareerAbilityRepair.'
+          if ($runtimeSubmodule -match 'CareerAbilityRepair\.Install\(\);') {
+            throw 'The recovered loader-sensitive CareerAbilityRepair.Install() must not be called.'
           }
+          $gameStart = $runtimeSubmodule.IndexOf('OnGameStart')
+          $careerRepair = $runtimeSubmodule.IndexOf('LinkedCareerAbilityRepairInstaller.Install();')
+          $runtimeRepair = $runtimeSubmodule.IndexOf('RuntimeRepair.Install();')
+          if ($gameStart -lt 0 -or $careerRepair -lt $gameStart -or $runtimeRepair -lt $gameStart) {
+            throw 'Recovered runtime/campaign repairs must install at OnGameStart rather than early OnSubModuleLoad.'
+          }
+
+          $linkedCareerRepair = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/LinkedCareerAbilityRepairInstaller.cs' -Raw
+          foreach ($surface in @('typeof(CareerAbilityRepair)','new Harmony(','new HarmonyMethod(','ResolveAndCacheRuntimeMembers','_installed')) {
+            if ($linkedCareerRepair -notmatch [regex]::Escape($surface)) { throw "Missing linked career-repair installer surface $surface" }
+          }
+          if ($linkedCareerRepair -match 'Type\.GetType\("HarmonyLib\.(Harmony|HarmonyMethod), 0Harmony"') { throw 'Linked career repair installer regressed to loader-sensitive Harmony lookup.' }
 
           $resolver = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/HarmonyAssemblyResolver.cs' -Raw
           foreach ($surface in @('typeof(Harmony).Assembly','AssemblyResolve','HarmonyLib.Harmony, 0Harmony','HarmonyLib.HarmonyMethod, 0Harmony')) {
             if ($resolver -notmatch [regex]::Escape($surface)) { throw "Missing auxiliary Harmony resolver surface $surface" }
+          }
+
+          $nativeCreation = Get-Content 'src/NativeCreation/MultiCharacterCampaignTOR/NativeCreation/NativeCharacterCreation.cs' -Raw
+          if ($nativeCreation -match 'Type\.GetType\("HarmonyLib\.(Harmony|HarmonyMethod), 0Harmony"') { throw 'NativeCreation regressed to loader-sensitive Harmony lookup.' }
+          foreach ($surface in @('typeof(Harmony)','typeof(HarmonyMethod)','new Harmony(HarmonyId)')) {
+            if ($nativeCreation -notmatch [regex]::Escape($surface)) { throw "Missing NativeCreation linked-Harmony surface $surface" }
+          }
+
+          $harbinger = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/HarbingerAIControllerSafety.cs' -Raw
+          foreach ($surface in @('SummonChampionScript','ShiftControllerToChampion','ShiftControllerToCaster','AgentControllerType.AI','IsRegisteredSharedHeroAgent')) {
+            if ($harbinger -notmatch [regex]::Escape($surface)) { throw "Missing Greater Harbinger AI safety surface $surface" }
+          }
+
+          $dialogue = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/CompanionDialogueEligibilityRepair.cs' -Raw
+          foreach ($surface in @('ConversationSwitchCondition','HeroHelper.IsCompanionInPlayerParty','IsRegisteredSharedHero','MobileParty.MainParty')) {
+            if ($dialogue -notmatch [regex]::Escape($surface)) { throw "Missing companion-dialogue repair surface $surface" }
           }
 
           $buttonRefresh = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/CareerButtonRefreshRepair.cs' -Raw
@@ -144,13 +176,13 @@ jobs:
           }
 
           $assemblyInfo = Get-Content 'src/IdentityGuard/Properties/AssemblyInfo.cs' -Raw
-          if ($assemblyInfo -notmatch 'AssemblyVersion\("1\.3\.3\.0"\)' -or $assemblyInfo -notmatch 'AssemblyFileVersion\("1\.3\.3\.0"\)') {
-            throw 'IdentityGuard assembly version is not 1.3.3.0.'
+          if ($assemblyInfo -notmatch 'AssemblyVersion\("1\.3\.4\.0"\)' -or $assemblyInfo -notmatch 'AssemblyFileVersion\("1\.3\.4\.0"\)') {
+            throw 'IdentityGuard assembly version is not 1.3.4.0.'
           }
           $manifest = Get-Content 'module/SubModule.xml' -Raw
-          if ($manifest -notmatch '<Version value="v1\.3\.3"') { throw 'Module manifest is not v1.3.3.' }
-          if (-not (Test-Path 'module/CHANGELOG-1.3.3.md')) { throw 'v1.3.3 changelog is missing.' }
-          if (-not (Test-Path '.github/workflows/release-v1.3.3.yml')) { throw 'v1.3.3 release workflow is missing.' }
+          if ($manifest -notmatch '<Version value="v1\.3\.4"') { throw 'Module manifest is not v1.3.4.' }
+          if (-not (Test-Path 'module/CHANGELOG-1.3.4.md')) { throw 'v1.3.4 changelog is missing.' }
+          if (-not (Test-Path '.github/workflows/release-v1.3.4.yml')) { throw 'v1.3.4 release workflow is missing.' }
 
       - name: Inventory required outputs
         shell: pwsh
@@ -170,7 +202,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: full-module-v1.3.3
+          name: full-module-v1.3.4
           path: |
             src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll
             src/NativeCreation/bin/Release/MultiCharacterCampaignTOR.NativeCreation.dll

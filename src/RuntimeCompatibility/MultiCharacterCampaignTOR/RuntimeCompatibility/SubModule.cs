@@ -14,24 +14,32 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
 		{
 			base.OnSubModuleLoad();
 			HarmonyAssemblyResolver.Install();
-			CareerAbilityRepair.Install();
 			CareerButtonRefreshRepair.Install();
 			AICareerAbilitySupport.Install();
 			AICareerAbilityActivationContext.Install();
 			AICareerAbilityTransitionGuard.Install();
-			RuntimeRepair.Install();
+			HarbingerAIControllerSafety.Install();
+			CompanionDialogueEligibilityRepair.Install();
 		}
 
 		protected override void OnGameStart(Game game, IGameStarter gameStarter)
 		{
 			base.OnGameStart(game, gameStarter);
 			HarmonyAssemblyResolver.Install();
-			CareerAbilityRepair.Install();
+
+			// Recovered campaign/runtime repairs need the game-start runtime boundary. The active-player
+			// career repair uses a strongly linked Harmony bootstrap here; the old recovered Install()
+			// method is deliberately never called because it still contains a loader-sensitive
+			// assembly-qualified 0Harmony lookup.
+			LinkedCareerAbilityRepairInstaller.Install();
+			RuntimeRepair.Install();
+
 			CareerButtonRefreshRepair.Install();
 			AICareerAbilitySupport.Install();
 			AICareerAbilityActivationContext.Install();
 			AICareerAbilityTransitionGuard.Install();
-			RuntimeRepair.Install();
+			HarbingerAIControllerSafety.Install();
+			CompanionDialogueEligibilityRepair.Install();
 		}
 	}
 }

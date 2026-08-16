@@ -5,4 +5,7 @@
     <RootNamespace>MultiCharacterCampaignTOR.NativeCreation</RootNamespace>
     <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="0Harmony"><HintPath>$(HarmonyDll)</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
 </Project>
