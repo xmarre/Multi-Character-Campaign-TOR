@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="TaleWorlds.Core"><HintPath>$(BannerlordBin)\TaleWorlds.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TaleWorlds.Library"><HintPath>$(BannerlordBin)\TaleWorlds.Library.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="TaleWorlds.MountAndBlade"><HintPath>$(BannerlordBin)\TaleWorlds.MountAndBlade.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="0Harmony"><HintPath>$(RuntimeHarmonyDll)</HintPath><Private>false</Private></Reference>
     <Compile Remove="MultiCharacterCampaignTOR\RuntimeCompatibility\CareerAbilityRepair.cs" />
