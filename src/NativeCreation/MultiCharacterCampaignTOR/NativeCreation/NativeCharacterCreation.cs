@@ -7,6 +7,7 @@ using System.Collections;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using HarmonyLib;
 
 namespace MultiCharacterCampaignTOR.NativeCreation
 {
@@ -77,9 +78,9 @@ namespace MultiCharacterCampaignTOR.NativeCreation
 
 		private static void InstallHarmonyPatches()
 		{
-			Type type = Type.GetType("HarmonyLib.Harmony, 0Harmony", throwOnError: true);
-			Type harmonyMethodType = Type.GetType("HarmonyLib.HarmonyMethod, 0Harmony", throwOnError: true);
-			object obj = Activator.CreateInstance(type, "multicharactercampaigntor.nativecreation.incampaigncompletion");
+			Type type = typeof(Harmony);
+			Type harmonyMethodType = typeof(HarmonyMethod);
+			object obj = new Harmony(HarmonyId);
 			Type type2 = RequireType("TaleWorlds.CampaignSystem.CharacterCreationContent.CharacterCreationManager, TaleWorlds.CampaignSystem");
 			Type type3 = RequireType("TaleWorlds.CampaignSystem.CharacterCreationContent.CharacterCreationState, TaleWorlds.CampaignSystem");
 			BindingFlags bindingAttr = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -91,8 +92,8 @@ namespace MultiCharacterCampaignTOR.NativeCreation
 			}
 			MethodInfo method3 = typeof(NativeCharacterCreation).GetMethod("OnStateActivatedPrefix", BindingFlags.Static | BindingFlags.NonPublic);
 			MethodInfo method4 = typeof(NativeCharacterCreation).GetMethod("FinalizeCharacterCreationStatePrefix", BindingFlags.Static | BindingFlags.NonPublic);
-			object prefix = Activator.CreateInstance(harmonyMethodType, method3);
-			object prefix2 = Activator.CreateInstance(harmonyMethodType, method4);
+			object prefix = new HarmonyMethod(method3);
+			object prefix2 = new HarmonyMethod(method4);
 			MethodInfo methodInfo = type.GetMethods(BindingFlags.Instance | BindingFlags.Public).First(delegate(MethodInfo methodInfo2)
 			{
 				if (methodInfo2.Name != "Patch")
