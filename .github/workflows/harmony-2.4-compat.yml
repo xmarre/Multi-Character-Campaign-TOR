@@ -43,14 +43,14 @@ jobs:
           dotnet restore src/MultiCharacterCampaignTOR.CSharp.sln -p:BannerlordBin="$env:BANNERLORD_BIN" -p:HarmonyDll="$env:HARMONY_DLL" -p:RuntimeHarmonyDll="$env:HARMONY_DLL"
           dotnet build src/MultiCharacterCampaignTOR.CSharp.sln -c Release --no-restore -p:BannerlordBin="$env:BANNERLORD_BIN" -p:HarmonyDll="$env:HARMONY_DLL" -p:RuntimeHarmonyDll="$env:HARMONY_DLL"
 
-      - name: Guard Harmony bootstrap against string-based type lookup regression
+      - name: Guard Harmony bootstrap against loader-context regressions
         shell: pwsh
         run: |
           $harmonyBridge = Get-Content 'src/MultiCharacterCampaignTOR/MultiCharacterCampaignTOR/HarmonyBridge.cs' -Raw
           $careerBridge = Get-Content 'src/MultiCharacterCampaignTOR/MultiCharacterCampaignTOR/CareerUniquesBridge.cs' -Raw
           foreach ($source in @($harmonyBridge, $careerBridge)) {
             if ($source -match 'Type\.GetType\("HarmonyLib\.(Harmony|HarmonyMethod), 0Harmony"\)') {
-              throw 'Harmony bootstrap regressed to assembly-name string lookup.'
+              throw 'Core Harmony bootstrap regressed to assembly-name string lookup.'
             }
           }
           if ($harmonyBridge -notmatch 'typeof\(Harmony\)' -or $harmonyBridge -notmatch 'typeof\(HarmonyMethod\)') {
@@ -61,4 +61,25 @@ jobs:
           }
           if ($careerBridge -notmatch 'campaign startup will continue without it') {
             throw 'CareerUniquesBridge startup-failure containment is missing.'
+          }
+
+          $resolver = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/HarmonyAssemblyResolver.cs' -Raw
+          $runtimeSubmodule = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/SubModule.cs' -Raw
+          $moduleXml = Get-Content 'module/SubModule.xml' -Raw
+
+          if ($resolver -notmatch 'typeof\(Harmony\)\.Assembly') {
+            throw 'Auxiliary Harmony resolver is not anchored to the linked 0Harmony assembly.'
+          }
+          if ($resolver -notmatch 'AssemblyResolve' -or $resolver -notmatch 'HarmonyLib\.Harmony, 0Harmony' -or $resolver -notmatch 'HarmonyLib\.HarmonyMethod, 0Harmony') {
+            throw 'Auxiliary Harmony resolver does not validate the legacy sidecar lookup shape.'
+          }
+          if ($runtimeSubmodule -notmatch 'HarmonyAssemblyResolver\.Install\(\);\s*CareerAbilityRepair\.Install\(\);') {
+            throw 'Runtime compatibility must install the Harmony resolver before CareerAbilityRepair.'
+          }
+
+          $runtimeIndex = $moduleXml.IndexOf('MultiCharacterCampaignTOR.RuntimeCompatibility.v140.dll')
+          $coreIndex = $moduleXml.IndexOf('MultiCharacterCampaignTOR.dll')
+          $identityIndex = $moduleXml.IndexOf('MultiCharacterCampaignTOR.IdentityGuard.v140.dll')
+          if ($runtimeIndex -lt 0 -or $coreIndex -lt 0 -or $identityIndex -lt 0 -or $runtimeIndex -gt $coreIndex -or $runtimeIndex -gt $identityIndex) {
+            throw 'RuntimeCompatibility must remain the first MCC submodule so the Harmony resolver is active before legacy sidecars.'
           }
