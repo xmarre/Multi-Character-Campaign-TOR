@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Reflection;
 using HarmonyLib;
 
@@ -22,23 +23,42 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
                 return;
             }
 
-            _harmonyAssembly = typeof(Harmony).Assembly;
-            _harmonyAssemblyName = _harmonyAssembly.GetName().Name;
-
-            AppDomain.CurrentDomain.AssemblyResolve += ResolveHarmonyAssembly;
-
-            // Validate the exact legacy lookup shape used by the reconstructed sidecars. This is
-            // intentionally performed only after the linked-assembly resolver is active.
-            if (Type.GetType("HarmonyLib.Harmony, 0Harmony", throwOnError: false) == null ||
-                Type.GetType("HarmonyLib.HarmonyMethod, 0Harmony", throwOnError: false) == null)
+            try
             {
-                AppDomain.CurrentDomain.AssemblyResolve -= ResolveHarmonyAssembly;
+                _harmonyAssembly = typeof(Harmony).Assembly;
+                _harmonyAssemblyName = _harmonyAssembly.GetName().Name;
+
+                AppDomain.CurrentDomain.AssemblyResolve += ResolveHarmonyAssembly;
+
+                // Validate the exact legacy lookup shape used by the reconstructed sidecars. This is
+                // intentionally performed only after the linked-assembly resolver is active.
+                if (Type.GetType("HarmonyLib.Harmony, 0Harmony", throwOnError: false) == null ||
+                    Type.GetType("HarmonyLib.HarmonyMethod, 0Harmony", throwOnError: false) == null)
+                {
+                    AppDomain.CurrentDomain.AssemblyResolve -= ResolveHarmonyAssembly;
+                    _harmonyAssembly = null;
+                    _harmonyAssemblyName = null;
+                    Log("Linked 0Harmony could not satisfy legacy assembly-qualified type resolution; auxiliary patches will retain their normal safe-failure behavior.");
+                    return;
+                }
+
+                _installed = true;
+                Log("Installed linked 0Harmony resolver for reconstructed auxiliary patches.");
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    AppDomain.CurrentDomain.AssemblyResolve -= ResolveHarmonyAssembly;
+                }
+                catch
+                {
+                }
+
                 _harmonyAssembly = null;
                 _harmonyAssemblyName = null;
-                throw new InvalidOperationException("The linked 0Harmony assembly could not satisfy legacy Harmony type resolution.");
+                Log("Harmony resolver initialization failed safely: " + ex);
             }
-
-            _installed = true;
         }
 
         private static Assembly ResolveHarmonyAssembly(object sender, ResolveEventArgs args)
@@ -65,6 +85,22 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
             }
 
             return null;
+        }
+
+        private static void Log(string message)
+        {
+            try
+            {
+                string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                string directory = Path.Combine(documents, "Mount and Blade II Bannerlord", "Configs", "ModLogs");
+                Directory.CreateDirectory(directory);
+                File.AppendAllText(
+                    Path.Combine(directory, "MultiCharacterCampaignTOR.log"),
+                    DateTime.Now.ToString("O") + " [Harmony Resolver] " + message + Environment.NewLine);
+            }
+            catch
+            {
+            }
         }
     }
 }
