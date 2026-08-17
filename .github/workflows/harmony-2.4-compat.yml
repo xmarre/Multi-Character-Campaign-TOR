@@ -88,17 +88,36 @@ jobs:
           $careerRepairIndex = $runtimeSubmodule.IndexOf('LinkedCareerAbilityRepairInstaller.Install();')
           $legacyCareerRepairIndex = $runtimeSubmodule.IndexOf('CareerAbilityRepair.Install();')
           $runtimeRepairIndex = $runtimeSubmodule.IndexOf('RuntimeRepair.Install();')
-          if ($loadIndex -lt 0 -or $gameStartIndex -lt 0 -or $careerRepairIndex -lt 0 -or $runtimeRepairIndex -lt 0) {
+          $nativeCreationCompatibilityIndex = $runtimeSubmodule.IndexOf('NativeCreationCompatibility.Install();')
+          if ($loadIndex -lt 0 -or $gameStartIndex -lt 0 -or $careerRepairIndex -lt 0 -or $runtimeRepairIndex -lt 0 -or $nativeCreationCompatibilityIndex -lt 0) {
             throw 'RuntimeCompatibility repair lifecycle surfaces are missing.'
           }
           if ($legacyCareerRepairIndex -ge 0) {
             throw 'The loader-sensitive recovered CareerAbilityRepair.Install() must not be invoked.'
           }
-          if ($careerRepairIndex -lt $gameStartIndex -or $runtimeRepairIndex -lt $gameStartIndex) {
-            throw 'Recovered runtime/campaign repairs must not install during early OnSubModuleLoad on affected Harmony 2.4 loader paths.'
+          if ($careerRepairIndex -lt $gameStartIndex -or $runtimeRepairIndex -lt $gameStartIndex -or $nativeCreationCompatibilityIndex -lt $gameStartIndex) {
+            throw 'Recovered runtime/campaign/NativeCreation repairs must install at OnGameStart rather than early OnSubModuleLoad on affected Harmony 2.4 loader paths.'
           }
-          if ($runtimeSubmodule -notmatch 'HarbingerAIControllerSafety\.Install\(\);' -or $runtimeSubmodule -notmatch 'CompanionDialogueEligibilityRepair\.Install\(\);') {
-            throw 'v1.3.4 Harbinger/dialogue compatibility installers are missing.'
+          foreach ($installer in @('RegisteredCareerAbilityPrerequisite.Install();','NativeCreationCompatibility.Install();','HarbingerAIControllerSafety.Install();','CompanionDialogueEligibilityRepair.Install();')) {
+            if ($runtimeSubmodule -notmatch [regex]::Escape($installer)) {
+              throw "Missing follow-up compatibility installer $installer"
+            }
+          }
+
+          $careerPrerequisite = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/RegisteredCareerAbilityPrerequisite.cs' -Raw
+          foreach ($surface in @('AbilityManagerMissionLogic','OnAgentCreated','IsRegisteredSharedHero','GetCareer','HasAttribute','AddAttribute','AbilityUser')) {
+            if ($careerPrerequisite -notmatch [regex]::Escape($surface)) { throw "Missing registered-career prerequisite surface $surface" }
+          }
+          if ($careerPrerequisite -match 'IsAIControlled') {
+            throw 'Registered career AbilityUser prerequisite must not depend on transient Agent.IsAIControlled state.'
+          }
+
+          $nativeCreationCompatibility = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/NativeCreationCompatibility.cs' -Raw
+          foreach ($surface in @('FindCompatibleMethod','AddNonSerializedListener','Expression.Lambda','NativeCreation wrapper Start entered','NativeCreation legacy Start entered','AfterWrapperStart','AfterLegacyStart')) {
+            if ($nativeCreationCompatibility -notmatch [regex]::Escape($surface)) { throw "Missing NativeCreation compatibility/diagnostic surface $surface" }
+          }
+          if ($nativeCreationCompatibility -notmatch 'MultiCharacterCampaignTOR\.NativeCreation\.Legacy\.dll') {
+            throw 'NativeCreation compatibility does not target the packaged legacy bridge.'
           }
 
           $runtimeIndex = $moduleXml.IndexOf('MultiCharacterCampaignTOR.RuntimeCompatibility.v140.dll')
