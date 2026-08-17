@@ -15,6 +15,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
 			base.OnSubModuleLoad();
 			HarmonyAssemblyResolver.Install();
 			CareerButtonRefreshRepair.Install();
+			RegisteredCareerAbilityPrerequisite.Install();
 			AICareerAbilitySupport.Install();
 			AICareerAbilityActivationContext.Install();
 			AICareerAbilityTransitionGuard.Install();
@@ -33,8 +34,10 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
 			// assembly-qualified 0Harmony lookup.
 			LinkedCareerAbilityRepairInstaller.Install();
 			RuntimeRepair.Install();
+			NativeCreationCompatibility.Install();
 
 			CareerButtonRefreshRepair.Install();
+			RegisteredCareerAbilityPrerequisite.Install();
 			AICareerAbilitySupport.Install();
 			AICareerAbilityActivationContext.Install();
 			AICareerAbilityTransitionGuard.Install();

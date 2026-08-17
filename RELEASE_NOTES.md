@@ -1,48 +1,42 @@
-# Multi-Character Campaign - TOR v1.3.4
+# Multi-Character Campaign - TOR v1.3.5
 
-Released: 16 August 2026.
+Released: 17 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
-## Fixed in-campaign character creation on the affected Harmony 2.4 loader path
+## Fixed AI career abilities requiring one manual player use first
 
-Community retesting of v1.3.3 showed that campaign startup, Ctrl+R, career buttons, and AI career abilities were working, but `Create a new playable character` could still fail on the same loader/runtime family that originally exposed the Harmony 2.4 startup problem.
+Community testing of v1.3.4 confirmed the wider AI-career implementation and the Greater Harbinger controller fix, but exposed one initialization edge case: a registered companion could require the player to personally use that hero's career ability once before the AI could use it in later battles.
 
-The remaining NativeCreation wrapper still resolved `Harmony` and `HarmonyMethod` through assembly-qualified `Type.GetType("..., 0Harmony")` calls when the creation flow was first opened. Version 1.3.4 removes that dependency: NativeCreation now references the runtime `0Harmony` assembly directly and binds `Harmony` / `HarmonyMethod` through the linked types, matching the proven core bootstrap fix.
+TOR decides whether to build an `AbilityComponent` during `AbilityManagerMissionLogic.OnAgentCreated` from the hero's persistent `AbilityUser` attribute. MCC previously established that prerequisite only when the agent already reported `IsAIControlled`. Agent creation can occur before the final controller assignment, so TOR could skip the component on that first AI spawn. Manually using the career ability as the hero persisted `AbilityUser`, which is why later AI battles then worked.
 
-The tester's log also exposed the recovered `CareerAbilityRepair.Install()` bootstrap still using the same loader-sensitive lookup. Version 1.3.4 no longer calls that recovered installer. A new linked-Harmony installer reuses the established career-repair callbacks and patch surfaces while constructing every Harmony patch through the RuntimeCompatibility assembly's direct `0Harmony` reference. The recovered campaign/runtime repairs are installed at `OnGameStart`, not during the early module-loader phase.
+Version 1.3.5 establishes `AbilityUser` before TOR's native `OnAgentCreated` handling for every registered shared hero that has a TOR career, independent of transient controller state. The existing controller-change path still owns CareerAbility/WizardAI setup and AI/player handoffs.
 
-This removes the reported `Harmony 0Harmony assembly is unavailable` path from both NativeCreation and the active-player CareerAbility repair code that MCC actually invokes.
+A registered career companion should therefore be able to use its career ability as AI without ever having been personally controlled or having the ability manually activated first.
 
-## Fixed AI Necromancer Greater Harbinger stealing player control
+## Fixed another Bannerlord 1.3.15 NativeCreation compatibility defect
 
-The v1.3.3 AI-career feature correctly allowed registered shared Necromancers to use Greater Harbinger, but TOR's native `SummonChampionScript` is written for the player career path. Its controller transition explicitly transfers player control to the summoned Harbinger and fades the player camera.
+The v1.3.4 community report still showed `Create a new playable character` failing on the affected installation. The quoted `RuntimeFix132 Installed...` line was only a successful startup message and did not contain the actual creation exception, so v1.3.5 does not misidentify that line as the failure.
 
-For a registered shared hero that is currently AI-controlled, v1.3.4 now suppresses that player-only controller transition. The AI Necromancer and summoned Harbinger remain AI-controlled and the actual player's controlled agent and camera are left untouched.
+A source audit found another concrete issue in the reconstructed in-campaign creation bridge. It registered Bannerlord's generic `OnCharacterCreationInitializedEvent` using an `Action<object>`, while Bannerlord 1.3.15 exposes this as `MbEvent<CharacterCreationManager>` and therefore requires an `Action<CharacterCreationManager>` listener. The reconstructed reflection matcher rejects the otherwise-correct `AddNonSerializedListener` overload when the supplied delegate has the wrong closed generic type.
 
-The native Greater Harbinger controller-switching behavior remains unchanged when the active player character casts it.
+RuntimeCompatibility now adapts that legacy listener to the exact delegate type required by the runtime event before the legacy reflection call proceeds.
 
-## Fixed companion activation through dialogue
+Because this particular installation has exposed several creation-path compatibility issues in succession, v1.3.5 also adds phase-specific NativeCreation diagnostics for wrapper entry, legacy entry, generic-listener adaptation, and escaped startup exceptions. If another installation-specific problem remains, the resulting log should identify the actual failing creation layer rather than showing only unrelated initialization output.
 
-The management-menu companion activation path already worked, but the MCC dialogue option used a reconstructed combination of `CompanionOf` and party membership that did not match Bannerlord 1.3.15's own companion-dialogue eligibility rules on the affected setup.
+## TOR career-button troop effects across character switches
 
-For unregistered companions, MCC now uses Bannerlord's native `HeroHelper.IsCompanionInPlayerParty(...)` predicate. Already registered shared heroes retain MCC's existing physical MainParty requirement for dialogue switching.
+TOR Waywatcher special arrows and Runelord unit runes are stored in the physical party's `MobilePartyExtendedInfo.TroopAttributes`. MCC's career-button switch repair only rebinds the active career-button delegates and refreshes the Party VM; it does not remove those troop attributes. TOR's own button `Disable()` path likewise clears only the UI delegates.
 
-This restores the `[Multi-Character Campaign] Take control of this character.` dialogue route without changing the menu-based activation path.
-
-## Confirmed v1.3.3 AI career support
-
-Community testing of v1.3.3 covered the available TOR career abilities and confirmed that AI-controlled shared characters retain and use their career abilities successfully across the tested careers. The Greater Harbinger controller transfer above was the one identified player-control integration issue from that test pass.
-
-The previously reported TOR party-screen career-button issue is also confirmed fixed by the same tester.
+Character switching therefore does not inherently remove those applied troop effects. They remain associated with the physical party/troop until TOR explicitly removes, replaces, or invalidates them.
 
 ## Save, behavior, and performance scope
 
 - Existing saves remain compatible; no save migration is required.
-- No recurring campaign-map scan, global hero scan, global party scan, or recurring campaign reconciliation was added.
-- NativeCreation and the active-player career repair now use linked Harmony bootstraps instead of loader-sensitive assembly-qualified Harmony lookup.
-- The Greater Harbinger compatibility guard runs only on TOR's existing controller-transition methods for that ability.
-- Companion dialogue eligibility is evaluated only when Bannerlord evaluates the conversation line.
+- No new campaign-map scan, global hero scan, global party scan, mission-tick polling, or recurring reconciliation was added.
+- The first-spawn career prerequisite runs only at TOR's existing agent-creation event for registered shared heroes with careers.
+- NativeCreation compatibility is applied only around the in-campaign character-creation startup path.
+- The v1.3.4 Greater Harbinger controller guard and companion-dialogue repair remain unchanged.
 
 ## Validation
 
@@ -52,6 +46,8 @@ The release is gated by:
 - full-solution Lib.Harmony 2.4.2 compatibility build;
 - the existing Lib.Harmony 2.3.3 build/runtime surface;
 - runtime patch-installation smoke coverage;
-- regression guards rejecting the loader-sensitive Harmony lookup from NativeCreation and from the invoked CareerAbility repair bootstrap, and enforcing the corrected runtime-repair lifecycle.
+- regression guards ensuring the registered-career `AbilityUser` prerequisite is not gated by transient `Agent.IsAIControlled`;
+- regression guards retaining the exact NativeCreation generic-listener adapter and startup diagnostics;
+- the existing linked-Harmony loader protections.
 
-The affected community installation remains the authoritative runtime confirmation for the loader-specific in-campaign creation fix, while the automated gates verify the exact build, patch, API, and packaging surfaces used by the release.
+The affected community installation remains the authoritative runtime confirmation for the in-campaign creation path, while the automated gates verify the build, patch, API, and packaging surfaces used by v1.3.5.
