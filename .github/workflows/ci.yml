@@ -167,7 +167,7 @@ jobs:
           if ($careerPrerequisite -match 'IsAIControlled') { throw 'Registered-career AbilityUser prerequisite must not depend on transient IsAIControlled state.' }
 
           $nativeCreationCompatibility = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/NativeCreationCompatibility.cs' -Raw
-          foreach ($surface in @('MultiCharacterCampaignTOR.NativeCreation.Legacy','AddNonSerializedListener','Action<object>','Delegate.CreateDelegate','NativeCreation wrapper Start entered','NativeCreation legacy Start entered')) {
+          foreach ($surface in @('MultiCharacterCampaignTOR.NativeCreation.Legacy','AddNonSerializedListener','Action<object>','Expression.Lambda','NativeCreation wrapper Start entered','NativeCreation legacy Start entered')) {
             if ($nativeCreationCompatibility -notmatch [regex]::Escape($surface)) { throw "Missing NativeCreation compatibility surface $surface" }
           }
 
