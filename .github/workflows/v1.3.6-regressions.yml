@@ -1,0 +1,57 @@
+name: v1.3.6 root-cause regressions
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard NativeCreation snapshot root fix
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $legacy = Get-Content 'src/NativeCreation.Legacy/MultiCharacterCampaignTOR/NativeCreation/NativeCharacterCreation.cs' -Raw
+          foreach ($surface in @('CaptureCampaignState','FindMethod(ClanSnapshot, text, _playerClan, text)','(FieldInfo)(object)parameterCount')) {
+            if ($legacy -notmatch [regex]::Escape($surface)) { throw "Expected recovered NativeCreation corruption surface is missing: $surface" }
+          }
+
+          $repair = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/NativeCreationLegacySnapshotRepair.cs' -Raw
+          foreach ($surface in @('FindMethod','BeforeCorruptedSnapshotHelper','CopyTextObject','Name','InformalName','return false')) {
+            if ($repair -notmatch [regex]::Escape($surface)) { throw "Missing NativeCreation snapshot repair surface: $surface" }
+          }
+          if ($repair -match '\(FieldInfo\)\(object\)') { throw 'Snapshot repair must not reproduce the recovered invalid FieldInfo cast.' }
+
+          $submodule = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/SubModule.cs' -Raw
+          $compat = $submodule.IndexOf('NativeCreationCompatibility.Install();')
+          $snapshot = $submodule.IndexOf('NativeCreationLegacySnapshotRepair.Install();')
+          if ($compat -lt 0 -or $snapshot -lt $compat) { throw 'NativeCreation snapshot repair must install after the legacy assembly compatibility loader.' }
+
+      - name: Guard controller-independent career identity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $identity = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/RegisteredCareerAbilityIdentityRepair.cs' -Raw
+          foreach ($surface in @('OnAgentCreated','OnAgentControllerChanged','TryGetRegisteredCareer','AbilityComponent','CareerAbility','KnownAbilitySystem','AbilityTemplateID','CurrentAbility')) {
+            if ($identity -notmatch [regex]::Escape($surface)) { throw "Missing registered-career identity surface: $surface" }
+          }
+          if ($identity -match 'IsAIControlled') { throw 'Stable registered-career identity must not depend on transient IsAIControlled state.' }
+          if ($identity -match 'WizardAIComponent') { throw 'Stable identity repair must not create or emulate WizardAI; AI behavior belongs to AICareerAbilitySupport.' }
+          if ($identity -match 'Lore|VoidSpell|Void spell|dummy spell|sample spell') { throw 'Non-caster career repair must not fabricate caster/lore/spell state.' }
+
+          $ai = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/AICareerAbilitySupport.cs' -Raw
+          foreach ($surface in @('IsRegisteredSharedAICareerAgent','IsAIControlled','WizardAIComponent')) {
+            if ($ai -notmatch [regex]::Escape($surface)) { throw "Existing AI-only casting boundary is missing: $surface" }
+          }
+
+          $submodule = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/SubModule.cs' -Raw
+          foreach ($surface in @('RegisteredCareerAbilityPrerequisite.Install()','RegisteredCareerAbilityIdentityRepair.Install()','AICareerAbilitySupport.Install()')) {
+            if ($submodule -notmatch [regex]::Escape($surface)) { throw "Missing registered-career install surface: $surface" }
+          }
