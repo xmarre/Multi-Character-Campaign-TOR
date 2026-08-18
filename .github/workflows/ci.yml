@@ -108,7 +108,7 @@ jobs:
           $textInquiry = $library.GetType('TaleWorlds.Library.TextInquiryData', $true)
           if (-not @($textInquiry.GetConstructors($flags) | Where-Object { $_.GetParameters().Length -ge 10 })) { throw 'TextInquiryData configurable-input constructor is unavailable.' }
 
-      - name: Inspect MCC v1.3.5 patch surfaces
+      - name: Inspect MCC v1.3.6 patch surfaces
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -130,18 +130,17 @@ jobs:
           }
 
           $runtimeSubmodule = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/SubModule.cs' -Raw
-          foreach ($surface in @('HarmonyAssemblyResolver.Install()','LinkedCareerAbilityRepairInstaller.Install()','CareerButtonRefreshRepair.Install()','AICareerAbilitySupport.Install()','AICareerAbilityActivationContext.Install()','AICareerAbilityTransitionGuard.Install()','HarbingerAIControllerSafety.Install()','CompanionDialogueEligibilityRepair.Install()','RegisteredCareerAbilityPrerequisite.Install()','NativeCreationCompatibility.Install()')) {
-            if ($runtimeSubmodule -notmatch [regex]::Escape($surface)) { throw "Missing v1.3.5 runtime compatibility installer surface $surface" }
+          foreach ($surface in @('HarmonyAssemblyResolver.Install()','LinkedCareerAbilityRepairInstaller.Install()','CareerButtonRefreshRepair.Install()','RegisteredCareerAbilityPrerequisite.Install()','RegisteredCareerAbilityIdentityRepair.Install()','AICareerAbilitySupport.Install()','AICareerAbilityActivationContext.Install()','AICareerAbilityTransitionGuard.Install()','HarbingerAIControllerSafety.Install()','CompanionDialogueEligibilityRepair.Install()','NativeCreationCompatibility.Install()','NativeCreationLegacySnapshotRepair.Install()')) {
+            if ($runtimeSubmodule -notmatch [regex]::Escape($surface)) { throw "Missing v1.3.6 runtime compatibility installer surface $surface" }
           }
-          if ($runtimeSubmodule -match 'CareerAbilityRepair\.Install\(\);') {
-            throw 'The recovered loader-sensitive CareerAbilityRepair.Install() must not be called.'
-          }
+          if ($runtimeSubmodule -match 'CareerAbilityRepair\.Install\(\);') { throw 'The recovered loader-sensitive CareerAbilityRepair.Install() must not be called.' }
           $gameStart = $runtimeSubmodule.IndexOf('OnGameStart')
           $careerRepair = $runtimeSubmodule.IndexOf('LinkedCareerAbilityRepairInstaller.Install();')
           $runtimeRepair = $runtimeSubmodule.IndexOf('RuntimeRepair.Install();')
-          if ($gameStart -lt 0 -or $careerRepair -lt $gameStart -or $runtimeRepair -lt $gameStart) {
-            throw 'Recovered runtime/campaign repairs must install at OnGameStart rather than early OnSubModuleLoad.'
-          }
+          $nativeCompat = $runtimeSubmodule.IndexOf('NativeCreationCompatibility.Install();')
+          $snapshotRepair = $runtimeSubmodule.IndexOf('NativeCreationLegacySnapshotRepair.Install();')
+          if ($gameStart -lt 0 -or $careerRepair -lt $gameStart -or $runtimeRepair -lt $gameStart) { throw 'Recovered runtime/campaign repairs must install at OnGameStart.' }
+          if ($nativeCompat -lt $gameStart -or $snapshotRepair -lt $nativeCompat) { throw 'NativeCreation snapshot repair must follow NativeCreation compatibility initialization at OnGameStart.' }
 
           $linkedCareerRepair = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/LinkedCareerAbilityRepairInstaller.cs' -Raw
           foreach ($surface in @('typeof(CareerAbilityRepair)','new Harmony(','new HarmonyMethod(','ResolveAndCacheRuntimeMembers','_installed')) {
@@ -166,10 +165,23 @@ jobs:
           }
           if ($careerPrerequisite -match 'IsAIControlled') { throw 'Registered-career AbilityUser prerequisite must not depend on transient IsAIControlled state.' }
 
+          $careerIdentity = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/RegisteredCareerAbilityIdentityRepair.cs' -Raw
+          foreach ($surface in @('OnAgentCreated','OnAgentControllerChanged','TryGetRegisteredCareer','AbilityComponent','CareerAbility','KnownAbilitySystem','AbilityTemplateID','CurrentAbility')) {
+            if ($careerIdentity -notmatch [regex]::Escape($surface)) { throw "Missing registered-career identity surface $surface" }
+          }
+          if ($careerIdentity -match 'IsAIControlled') { throw 'Registered-career identity must not depend on transient IsAIControlled state.' }
+          if ($careerIdentity -match 'WizardAIComponent') { throw 'Registered-career identity repair must not fabricate WizardAI state.' }
+
           $nativeCreationCompatibility = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/NativeCreationCompatibility.cs' -Raw
           foreach ($surface in @('MultiCharacterCampaignTOR.NativeCreation.Legacy','AddNonSerializedListener','Action<object>','Expression.Lambda','NativeCreation wrapper Start entered','NativeCreation legacy Start entered')) {
             if ($nativeCreationCompatibility -notmatch [regex]::Escape($surface)) { throw "Missing NativeCreation compatibility surface $surface" }
           }
+
+          $snapshot = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/NativeCreationLegacySnapshotRepair.cs' -Raw
+          foreach ($surface in @('FindMethod','BeforeCorruptedSnapshotHelper','CopyTextObject','Name','InformalName','return false')) {
+            if ($snapshot -notmatch [regex]::Escape($surface)) { throw "Missing NativeCreation snapshot repair surface $surface" }
+          }
+          if ($snapshot -match '\(FieldInfo\)\(object\)') { throw 'NativeCreation snapshot repair reproduced the invalid recovered FieldInfo cast.' }
 
           $harbinger = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/HarbingerAIControllerSafety.cs' -Raw
           foreach ($surface in @('SummonChampionScript','ShiftControllerToChampion','ShiftControllerToCaster','AgentControllerType.AI','IsRegisteredSharedHeroAgent')) {
@@ -187,13 +199,11 @@ jobs:
           }
 
           $assemblyInfo = Get-Content 'src/IdentityGuard/Properties/AssemblyInfo.cs' -Raw
-          if ($assemblyInfo -notmatch 'AssemblyVersion\("1\.3\.5\.0"\)' -or $assemblyInfo -notmatch 'AssemblyFileVersion\("1\.3\.5\.0"\)') {
-            throw 'IdentityGuard assembly version is not 1.3.5.0.'
-          }
+          if ($assemblyInfo -notmatch 'AssemblyVersion\("1\.3\.6\.0"\)' -or $assemblyInfo -notmatch 'AssemblyFileVersion\("1\.3\.6\.0"\)') { throw 'IdentityGuard assembly version is not 1.3.6.0.' }
           $manifest = Get-Content 'module/SubModule.xml' -Raw
-          if ($manifest -notmatch '<Version value="v1\.3\.5"') { throw 'Module manifest is not v1.3.5.' }
-          if (-not (Test-Path 'module/CHANGELOG-1.3.5.md')) { throw 'v1.3.5 changelog is missing.' }
-          if (-not (Test-Path '.github/workflows/release-v1.3.5.yml')) { throw 'v1.3.5 release workflow is missing.' }
+          if ($manifest -notmatch '<Version value="v1\.3\.6"') { throw 'Module manifest is not v1.3.6.' }
+          if (-not (Test-Path 'module/CHANGELOG-1.3.6.md')) { throw 'v1.3.6 changelog is missing.' }
+          if (-not (Test-Path '.github/workflows/release-v1.3.6.yml')) { throw 'v1.3.6 release workflow is missing.' }
 
       - name: Inventory required outputs
         shell: pwsh
@@ -213,7 +223,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: full-module-v1.3.5
+          name: full-module-v1.3.6
           path: |
             src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll
             src/NativeCreation/bin/Release/MultiCharacterCampaignTOR.NativeCreation.dll
