@@ -1,0 +1,6 @@
+## v1.3.7
+- Fixed the TOR 1.16 AI career-ability transition guard failing to install because it treated `WizardAIComponent.Agent` as a property. TOR exposes the agent through the inherited `TaleWorlds.MountAndBlade.AgentComponent.Agent` field; MCC now resolves that field across the component inheritance chain and reads it directly.
+- Restored the intended controller-transition protection for registered shared heroes: stale `WizardAIComponent` ticking is suppressed while the same physical agent is player-controlled, cached AI casting behavior is cleared on controller handoff, and TOR career-ability ordering is normalized when direct control returns to the hero.
+- Added a regression guard that requires the inherited-field resolver/access path and rejects the invalid `WizardAIComponent.Agent` property lookup.
+- Preserved the v1.3.6 in-campaign native TOR character-creation fix, registered non-spellcaster career identity repair, v1.3.5 first-spawn `AbilityUser` prerequisite, v1.3.4 Greater Harbinger controller safety, companion dialogue activation, and career-button rebinding.
+- Existing saves remain compatible. No campaign-map scan, global hero/party polling, mission-tick polling, or recurring reconciliation was added.

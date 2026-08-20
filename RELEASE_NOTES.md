@@ -1,54 +1,47 @@
-# Multi-Character Campaign - TOR v1.3.6
+# Multi-Character Campaign - TOR v1.3.7
 
-Released: 18 August 2026.
+Released: 20 August 2026.
 
 Target: Bannerlord 1.3.15 and The Old Realms: War in the Mountains 1.16.
 
-## Fixed the remaining Create New Character startup failure
+## Fixed TOR 1.16 AI career transition guard installation
 
-Aeen's v1.3.5 retest confirmed that in-campaign `Create a new playable character` still did not start. The supplied log did not contain the v1.3.5 NativeCreation launch/adapter diagnostics, which pointed to a failure before the character-creation event/state path.
+A v1.3.5 user report included a secondary startup warning:
 
-A full audit of the recovered NativeCreation implementation found the root cause in `CaptureCampaignState()`. The decompiled helper used to snapshot player-clan members was corrupted: it attempted to cast the member-name string (for example `Renown`, `Name`, or `InformalName`) to `FieldInfo` while deciding whether to copy a `TextObject`. That throws before NativeCreation subscribes its initialization listener, allocates the candidate, or pushes `CharacterCreationState`.
+`AI career-ability transition guard installation failed safely: ... WizardAIComponent.Agent not found.`
 
-v1.3.6 repairs that exact recovered helper at runtime. Clan values are read by their actual member names, and only `Name` / `InformalName` receive the intended `CopyTextObject()` copy. The existing v1.3.5 generic event-listener adaptation remains in place for the later creation stage.
+The warning was separate from the reported in-campaign character-creation failure, which was already fixed by v1.3.6. It did expose a real compatibility error in the AI career controller-transition guard.
 
-## Fixed non-spellcaster AI career abilities
+The guard treated `TOR_Core.BattleMechanics.AI.CastingAI.Components.WizardAIComponent.Agent` as a property. In TOR WiTM 1.16 the component receives its agent from Bannerlord's `AgentComponent` base type through the inherited `Agent` field. The property lookup therefore failed while resolving runtime surfaces, causing the guard to exit through its safe-failure path before installing any of its Harmony patches.
 
-Aeen also isolated an asymmetry between spellcasting and non-spellcasting careers: careers such as Waywatcher could be used by AI only after taking direct control, and an RTS controller switch could reveal that the hero had no career ability at all, while spellcasters continued to work.
+v1.3.7 resolves the actual field across the component inheritance chain and reads it directly. This restores the existing transition behavior for registered shared heroes:
 
-TOR's native `AbilityComponent` constructor creates `CareerAbility` automatically only for `Hero.MainHero`. AI spellcasters usually mask this because their selected spells still populate `KnownAbilitySystem`, allowing TOR's normal casting/WizardAI path to exist. A non-spellcaster career can instead have no selected spell/prayer abilities, leaving its career slot empty when controller timing misses MCC's AI-only repair.
+- a stale TOR `WizardAIComponent` is kept dormant while its hero agent is player-controlled;
+- cached AI casting behavior is cleared when Bannerlord changes the agent controller;
+- TOR career-ability ordering is normalized when direct control returns to the registered hero;
+- compiler-generated TOR career-script context patches continue to install as before.
 
-v1.3.6 separates stable career identity from AI casting state. Every registered shared hero with a TOR career now receives/retains its `AbilityComponent` and `CareerAbility` during agent creation and controller changes regardless of whether the agent is currently player- or AI-controlled and regardless of whether the hero knows normal spells or prayers.
+The change is limited to the incorrect reflected member resolution. It does not replace TOR AI logic or introduce a second controller system.
 
-The existing AI-career layer still owns `WizardAIComponent` and AI-only casting behavior once Bannerlord reports the agent as AI-controlled. No companion is converted into a fake spellcaster, and no dummy lore, void spell, placeholder spell, or synthetic casting progression is added.
+## Included previous fix
 
-This also means an RTS switch to a registered non-caster career hero should expose the same career ability that belongs to that hero rather than an empty career slot.
+v1.3.7 includes the v1.3.6 root fix for `Create a new playable character`. That fix intercepts the decompiler-corrupted NativeCreation clan-snapshot helper which cast member-name strings such as `Name` and `InformalName` to `FieldInfo` before TOR character creation could open.
 
-## Preserved behavior
-
-- v1.3.5's controller-independent `AbilityUser` first-spawn prerequisite remains active.
-- v1.3.4's Greater Harbinger controller safety remains unchanged.
-- Companion activation through dialogue remains unchanged.
-- TOR career-button rebinding remains unchanged.
-- Existing spellcaster AI career behavior remains unchanged.
-- Personal perks/progression remain native per-hero state.
+Users still on the Nexus v1.3.5 package should update directly to v1.3.7.
 
 ## Save and performance scope
 
-- Existing saves remain compatible; no save migration is required.
-- No campaign-map scan, global hero scan, global party scan, mission-tick polling, or recurring campaign reconciliation was added.
-- Career identity repair runs only on TOR's existing agent-created/controller-changed callbacks.
-- NativeCreation snapshot repair runs only when the recovered creation flow snapshots clan state.
+- Existing saves remain compatible; no migration is required.
+- No campaign-map scan, global hero scan, global party scan, mission-tick polling, or recurring reconciliation was added.
+- The repaired lookup runs only while the existing AI-career transition guard installs.
+- Controller handling remains event-driven through TOR/Bannerlord mission callbacks.
 
 ## Validation
 
-v1.3.6 is gated by:
+v1.3.7 is gated by:
 
 - Bannerlord 1.3.15 full build/API validation;
-- Lib.Harmony 2.3.3 build/runtime validation;
+- Lib.Harmony 2.3.3 build validation;
 - full-solution Lib.Harmony 2.4.2 compatibility validation;
-- runtime patch-installation smoke coverage;
-- dedicated regression guards for the recovered NativeCreation `FieldInfo` cast corruption;
-- dedicated regression guards ensuring registered career identity does not depend on `Agent.IsAIControlled`, normal spells, lores, or `WizardAIComponent` creation.
-
-The affected community installation remains the runtime confirmation target for the repaired in-campaign creation path and non-spellcaster career behavior.
+- a dedicated regression assertion requiring the inherited `Agent` field resolver/access path and rejecting the invalid `WizardAIComponent.Agent` property lookup;
+- the existing NativeCreation, career identity, Greater Harbinger, companion-dialogue, battle-intervention, reinforcement, settlement-switch, and package-output guards.
