@@ -1,0 +1,62 @@
+name: v1.3.7 WizardAI field regression
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore Bannerlord 1.3.15 references
+        shell: pwsh
+        run: dotnet restore src/IdentityGuard/MultiCharacterCampaignTOR.IdentityGuard.v140.csproj
+
+      - name: Verify Bannerlord AgentComponent member shape
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $mountAndBlade = Get-ChildItem "$env:USERPROFILE\.nuget\packages" -Recurse -Filter TaleWorlds.MountAndBlade.dll | Select-Object -First 1
+          if (-not $mountAndBlade) { throw 'TaleWorlds.MountAndBlade.dll was not restored.' }
+
+          $assemblyDir = $mountAndBlade.Directory.FullName
+          [System.AppDomain]::CurrentDomain.add_AssemblyResolve({
+            param($sender, $args)
+            $name = (New-Object System.Reflection.AssemblyName($args.Name)).Name + '.dll'
+            $candidate = Join-Path $assemblyDir $name
+            if (Test-Path $candidate) { return [System.Reflection.Assembly]::LoadFrom($candidate) }
+            return $null
+          })
+          foreach ($dll in Get-ChildItem $assemblyDir -Filter '*.dll') { try { [void][System.Reflection.Assembly]::LoadFrom($dll.FullName) } catch {} }
+
+          $assembly = [System.Reflection.Assembly]::LoadFrom($mountAndBlade.FullName)
+          $type = $assembly.GetType('TaleWorlds.MountAndBlade.AgentComponent', $true)
+          $declared = [System.Reflection.BindingFlags]'DeclaredOnly,Public,NonPublic,Instance'
+          $field = $type.GetField('Agent', $declared)
+          if (-not $field) { throw 'Bannerlord 1.3.15 AgentComponent.Agent field is unavailable.' }
+          if ($type.GetProperty('Agent', $declared)) { throw 'Unexpected AgentComponent.Agent property appeared; re-audit the runtime shape.' }
+          if ($field.FieldType.FullName -ne 'TaleWorlds.MountAndBlade.Agent') { throw "Unexpected AgentComponent.Agent field type: $($field.FieldType.FullName)" }
+          Write-Host "Confirmed $($field.DeclaringType.FullName).$($field.Name) : $($field.FieldType.FullName)"
+
+      - name: Guard inherited WizardAI agent access
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $guard = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/AICareerAbilityTransitionGuard.cs' -Raw
+          foreach ($surface in @('_wizardAgentField','RequireFieldInHierarchy(_wizardAIComponentType, "Agent")','DeclaredInstanceFlags','current = current.BaseType','_wizardAgentField.GetValue(__instance)')) {
+            if ($guard -notmatch [regex]::Escape($surface)) { throw "Missing inherited WizardAI Agent-field surface: $surface" }
+          }
+          if ($guard -match '_wizardAgentProperty') { throw 'WizardAI agent access regressed to a property cache.' }
+          if ($guard -match 'RequireProperty\(_wizardAIComponentType,\s*"Agent"') { throw 'WizardAI agent access regressed to the invalid property lookup.' }
+
+          $changelog = Get-Content 'module/CHANGELOG-1.3.7.md' -Raw
+          if ($changelog -notmatch 'AgentComponent\.Agent') { throw 'v1.3.7 changelog does not document the repaired runtime member shape.' }
