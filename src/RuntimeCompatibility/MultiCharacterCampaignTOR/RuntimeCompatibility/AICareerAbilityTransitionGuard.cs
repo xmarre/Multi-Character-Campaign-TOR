@@ -43,8 +43,8 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
         private static PropertyInfo _mccBehaviorInstanceProperty;
         private static PropertyInfo _knownAbilitySystemProperty;
         private static PropertyInfo _careerAbilityProperty;
-        private static PropertyInfo _wizardAgentProperty;
 
+        private static FieldInfo _wizardAgentField;
         private static FieldInfo _wizardAvailableCastingBehaviorsField;
         private static FieldInfo _wizardCurrentCastingBehaviorField;
 
@@ -112,7 +112,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
 
             _knownAbilitySystemProperty = RequireProperty(_abilityComponentType, "KnownAbilitySystem", InstanceFlags);
             _careerAbilityProperty = RequireProperty(_abilityComponentType, "CareerAbility", InstanceFlags);
-            _wizardAgentProperty = RequireProperty(_wizardAIComponentType, "Agent", InstanceFlags);
+            _wizardAgentField = RequireFieldInHierarchy(_wizardAIComponentType, "Agent");
             _wizardAvailableCastingBehaviorsField = RequireField(_wizardAIComponentType, "_availableCastingBehaviors", InstanceFlags);
             _wizardCurrentCastingBehaviorField = RequireField(_wizardAIComponentType, "CurrentCastingBehavior", InstanceFlags);
 
@@ -131,7 +131,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
                     return true;
                 }
 
-                object agent = _wizardAgentProperty.GetValue(__instance, null);
+                object agent = _wizardAgentField.GetValue(__instance);
                 if (!IsRegisteredSharedHeroAgent(agent))
                 {
                     return true;
@@ -358,6 +358,21 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
                 throw new MissingFieldException(type.FullName, name);
             }
             return field;
+        }
+
+        private static FieldInfo RequireFieldInHierarchy(Type type, string name)
+        {
+            Type current = type;
+            while (current != null)
+            {
+                FieldInfo field = current.GetField(name, DeclaredInstanceFlags);
+                if (field != null)
+                {
+                    return field;
+                }
+                current = current.BaseType;
+            }
+            throw new MissingFieldException(type.FullName, name);
         }
 
         private static MethodInfo RequireMethod(Type type, string name, BindingFlags flags)
