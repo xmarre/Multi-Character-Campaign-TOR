@@ -42,6 +42,7 @@ jobs:
           $flags = [System.Reflection.BindingFlags]'Public,NonPublic,Instance'
           $content = $assembly.GetType('TaleWorlds.CampaignSystem.CharacterCreationContent.CharacterCreationContent', $true)
           $manager = $assembly.GetType('TaleWorlds.CampaignSystem.CharacterCreationContent.CharacterCreationManager', $true)
+          $hero = $assembly.GetType('TaleWorlds.CampaignSystem.Hero', $true)
 
           $setSelectedCulture = $content.GetMethods($flags) | Where-Object Name -eq 'SetSelectedCulture'
           if (@($setSelectedCulture).Count -ne 1) { throw 'Expected exactly one CharacterCreationContent.SetSelectedCulture surface.' }
@@ -50,7 +51,13 @@ jobs:
           if (-not ($content.GetMethods($flags) | Where-Object Name -eq 'ApplyCulture')) { throw 'CharacterCreationContent.ApplyCulture is unavailable.' }
           if (-not ($manager.GetMethods($flags) | Where-Object Name -eq 'ApplyFinalEffects')) { throw 'CharacterCreationManager.ApplyFinalEffects is unavailable.' }
 
-          Write-Host 'Confirmed Bannerlord selected-culture and deferred ApplyCulture/ApplyFinalEffects surfaces.'
+          $cultureField = $hero.GetField('Culture', [System.Reflection.BindingFlags]'Public,Instance')
+          if (-not $cultureField) { throw 'Hero.Culture is no longer a public field; re-audit the narrow culture commit.' }
+          if ($cultureField.FieldType.FullName -ne 'TaleWorlds.CampaignSystem.CultureObject') {
+            throw "Unexpected Hero.Culture field type: $($cultureField.FieldType.FullName)"
+          }
+
+          Write-Host 'Confirmed Bannerlord selected-culture, deferred ApplyCulture/ApplyFinalEffects, and Hero.Culture surfaces.'
 
       - name: Guard NativeCreation mixed-race transaction
         shell: pwsh
@@ -64,15 +71,15 @@ jobs:
             '_legacyCandidateHeroField',
             'SetSelectedCulture',
             'SelectedCulture',
-            'ReferenceEquals(mainHero, candidate)',
-            'SetMember(candidate, "Culture", selectedCulture)',
+            'ReferenceEquals(Hero.MainHero, candidate)',
+            'candidate.Culture = selectedCulture',
             'before TOR race resolution'
           )) {
             if ($source -notmatch [regex]::Escape($surface)) { throw "Missing mixed-race compatibility surface: $surface" }
           }
 
           if ($source -match 'ApplyFinalEffects\s*\(') { throw 'Mixed-race repair must not run Bannerlord campaign-start ApplyFinalEffects.' }
-          if ($source -match 'SetMember\([^,]+,\s*"Culture"[^\r\n]*Clan') { throw 'Mixed-race repair must not replace the persistent player-clan culture.' }
+          if ($source -match 'Clan\.PlayerClan.*Culture\s*=') { throw 'Mixed-race repair must not replace the persistent player-clan culture.' }
 
           $submodule = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/SubModule.cs' -Raw
           if ($submodule -notmatch 'NativeCreationMixedRaceCompatibility\.Install\(\)') { throw 'Mixed-race compatibility installer is not wired.' }
