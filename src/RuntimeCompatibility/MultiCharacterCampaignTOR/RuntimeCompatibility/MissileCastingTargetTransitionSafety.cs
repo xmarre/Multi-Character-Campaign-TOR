@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Reflection.Emit;
 using HarmonyLib;
 
 namespace MultiCharacterCampaignTOR.RuntimeCompatibility
@@ -19,6 +17,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
     internal static class MissileCastingTargetTransitionSafety
     {
         private const BindingFlags InstanceFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        private const BindingFlags StaticFlags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
 
         private static bool _installed;
         private static FieldInfo _currentTargetField;
@@ -51,22 +50,32 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
                 }
 
                 ParameterInfo targetParameter = updateTarget.GetParameters()[0];
-                if (!targetParameter.ParameterType.IsAssignableFrom(targetType) &&
-                    !targetType.IsAssignableFrom(targetParameter.ParameterType))
+                if (targetParameter.ParameterType != targetType)
                 {
                     throw new InvalidOperationException(
                         "TOR MissileCastingBehavior.UpdateTarget has an unexpected target parameter type: " +
                         targetParameter.ParameterType.FullName + ".");
                 }
-                if (updateTarget.ReturnType != targetParameter.ParameterType)
+                if (updateTarget.ReturnType != targetType)
                 {
                     throw new InvalidOperationException(
                         "TOR MissileCastingBehavior.UpdateTarget no longer returns its Target parameter type.");
                 }
 
+                MethodInfo prefixDefinition = typeof(MissileCastingTargetTransitionSafety).GetMethod(
+                    nameof(BeforeUpdateTarget),
+                    StaticFlags);
+                if (prefixDefinition == null || !prefixDefinition.IsGenericMethodDefinition)
+                {
+                    throw new MissingMethodException(typeof(MissileCastingTargetTransitionSafety).FullName, nameof(BeforeUpdateTarget));
+                }
+
+                // Close the prefix over TOR's exact runtime Target type so Harmony receives an exact
+                // ref Target __result signature without adding a compile-time TOR_Core dependency.
+                MethodInfo prefix = prefixDefinition.MakeGenericMethod(targetType);
                 new Harmony("xmarre.multicharactercampaign.tor.missile-target-transition-safety").Patch(
                     updateTarget,
-                    transpiler: new HarmonyMethod(typeof(MissileCastingTargetTransitionSafety), nameof(GuardTargetStateTranspiler)));
+                    prefix: new HarmonyMethod(prefix));
 
                 _installed = true;
                 Log("Installed TOR MissileCastingBehavior transition target guard.");
@@ -77,44 +86,25 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
             }
         }
 
-        private static IEnumerable<CodeInstruction> GuardTargetStateTranspiler(
-            IEnumerable<CodeInstruction> instructions,
-            ILGenerator generator)
+        private static bool BeforeUpdateTarget<T>(object __instance, T __0, ref T __result)
+            where T : class
         {
-            List<CodeInstruction> original = instructions.ToList();
-            if (original.Count == 0 || _currentTargetField == null || _formationField == null)
+            if (__instance == null)
             {
-                return original;
+                __result = __0;
+                return false;
             }
 
-            Label runOriginal = generator.DefineLabel();
-            Label returnIncomingTarget = generator.DefineLabel();
-            original[0].labels.Add(runOriginal);
-
-            var guarded = new List<CodeInstruction>
+            object currentTarget = _currentTargetField.GetValue(__instance);
+            if (currentTarget != null &&
+                _formationField.GetValue(currentTarget) != null &&
+                __0 != null)
             {
-                // if (__instance.CurrentTarget == null) return target;
-                new CodeInstruction(OpCodes.Ldarg_0),
-                new CodeInstruction(OpCodes.Ldfld, _currentTargetField),
-                new CodeInstruction(OpCodes.Brfalse, returnIncomingTarget),
+                return true;
+            }
 
-                // if (__instance.CurrentTarget.Formation == null) return target;
-                new CodeInstruction(OpCodes.Ldarg_0),
-                new CodeInstruction(OpCodes.Ldfld, _currentTargetField),
-                new CodeInstruction(OpCodes.Ldfld, _formationField),
-                new CodeInstruction(OpCodes.Brfalse, returnIncomingTarget),
-
-                // if (target == null) return target;
-                new CodeInstruction(OpCodes.Ldarg_1),
-                new CodeInstruction(OpCodes.Brtrue, runOriginal)
-            };
-
-            var loadIncomingTarget = new CodeInstruction(OpCodes.Ldarg_1);
-            loadIncomingTarget.labels.Add(returnIncomingTarget);
-            guarded.Add(loadIncomingTarget);
-            guarded.Add(new CodeInstruction(OpCodes.Ret));
-            guarded.AddRange(original);
-            return guarded;
+            __result = __0;
+            return false;
         }
 
         private static FieldInfo RequireFieldInHierarchy(Type type, string name)
@@ -157,12 +147,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
             try
             {
                 Type logType = Type.GetType("MultiCharacterCampaignTOR.Log, MultiCharacterCampaignTOR", false);
-                MethodInfo info = logType?.GetMethod(
-                    "Info",
-                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
-                    null,
-                    new[] { typeof(string) },
-                    null);
+                MethodInfo info = logType?.GetMethod("Info", StaticFlags, null, new[] { typeof(string) }, null);
                 info?.Invoke(null, new object[] { "[MissileTargetTransitionSafety] " + message });
             }
             catch
