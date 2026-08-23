@@ -98,15 +98,19 @@ jobs:
             'CurrentTarget',
             'Formation',
             'TOR_Core.BattleMechanics.AI.CommonAIFunctions.Target',
-            'GuardTargetStateTranspiler',
-            'OpCodes.Ldarg_1',
-            'OpCodes.Ret'
+            'BeforeUpdateTarget',
+            'MakeGenericMethod(targetType)',
+            'ref T __result',
+            '__result = __0',
+            '_currentTargetField.GetValue(__instance)',
+            '_formationField.GetValue(currentTarget)'
           )) {
             if ($source -notmatch [regex]::Escape($surface)) { throw "Missing missile transition guard surface: $surface" }
           }
 
           if ($source -match 'NullReferenceException') { throw 'Missile transition repair must not broadly swallow NullReferenceException.' }
           if ($source -match 'finalizer\s*:') { throw 'Missile transition repair must guard the invalid state before native dereferences.' }
+          if ($source -match 'ILGenerator|GuardTargetStateTranspiler') { throw 'Missile transition repair regressed to the removed IL-generator path.' }
 
           $submodule = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/SubModule.cs' -Raw
           if ($submodule -notmatch 'MissileCastingTargetTransitionSafety\.Install\(\)') { throw 'Missile transition safety installer is not wired.' }
