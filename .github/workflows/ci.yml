@@ -108,7 +108,17 @@ jobs:
           $textInquiry = $library.GetType('TaleWorlds.Library.TextInquiryData', $true)
           if (-not @($textInquiry.GetConstructors($flags) | Where-Object { $_.GetParameters().Length -ge 10 })) { throw 'TextInquiryData configurable-input constructor is unavailable.' }
 
-      - name: Inspect MCC v1.3.7 patch surfaces
+          $creationContent = $asm.GetType('TaleWorlds.CampaignSystem.CharacterCreationContent.CharacterCreationContent', $true)
+          if (-not @($creationContent.GetMethods($flags) | Where-Object { $_.Name -eq 'SetSelectedCulture' }).Count) { throw 'CharacterCreationContent.SetSelectedCulture is unavailable.' }
+          if (-not $creationContent.GetProperty('SelectedCulture', $flags)) { throw 'CharacterCreationContent.SelectedCulture is unavailable.' }
+          if (-not @($creationContent.GetMethods($flags) | Where-Object { $_.Name -eq 'ApplyCulture' }).Count) { throw 'CharacterCreationContent.ApplyCulture is unavailable.' }
+          $creationManager = $asm.GetType('TaleWorlds.CampaignSystem.CharacterCreationContent.CharacterCreationManager', $true)
+          if (-not @($creationManager.GetMethods($flags) | Where-Object { $_.Name -eq 'ApplyFinalEffects' }).Count) { throw 'CharacterCreationManager.ApplyFinalEffects is unavailable.' }
+          $heroType = $asm.GetType('TaleWorlds.CampaignSystem.Hero', $true)
+          $cultureField = $heroType.GetField('Culture', [System.Reflection.BindingFlags]'Public,Instance')
+          if (-not $cultureField -or $cultureField.FieldType.FullName -ne 'TaleWorlds.CampaignSystem.CultureObject') { throw 'Hero.Culture public CultureObject field is unavailable.' }
+
+      - name: Inspect MCC v1.3.8 patch surfaces
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -130,8 +140,8 @@ jobs:
           }
 
           $runtimeSubmodule = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/SubModule.cs' -Raw
-          foreach ($surface in @('HarmonyAssemblyResolver.Install()','LinkedCareerAbilityRepairInstaller.Install()','CareerButtonRefreshRepair.Install()','RegisteredCareerAbilityPrerequisite.Install()','RegisteredCareerAbilityIdentityRepair.Install()','AICareerAbilitySupport.Install()','AICareerAbilityActivationContext.Install()','AICareerAbilityTransitionGuard.Install()','HarbingerAIControllerSafety.Install()','CompanionDialogueEligibilityRepair.Install()','NativeCreationCompatibility.Install()','NativeCreationLegacySnapshotRepair.Install()')) {
-            if ($runtimeSubmodule -notmatch [regex]::Escape($surface)) { throw "Missing v1.3.7 runtime compatibility installer surface $surface" }
+          foreach ($surface in @('HarmonyAssemblyResolver.Install()','LinkedCareerAbilityRepairInstaller.Install()','CareerButtonRefreshRepair.Install()','RegisteredCareerAbilityPrerequisite.Install()','RegisteredCareerAbilityIdentityRepair.Install()','AICareerAbilitySupport.Install()','AICareerAbilityActivationContext.Install()','AICareerAbilityTransitionGuard.Install()','HarbingerAIControllerSafety.Install()','CompanionDialogueEligibilityRepair.Install()','NativeCreationCompatibility.Install()','NativeCreationLegacySnapshotRepair.Install()','NativeCreationMixedRaceCompatibility.Install()','MissileCastingTargetTransitionSafety.Install()')) {
+            if ($runtimeSubmodule -notmatch [regex]::Escape($surface)) { throw "Missing v1.3.8 runtime compatibility installer surface $surface" }
           }
           if ($runtimeSubmodule -match 'CareerAbilityRepair\.Install\(\);') { throw 'The recovered loader-sensitive CareerAbilityRepair.Install() must not be called.' }
           $gameStart = $runtimeSubmodule.IndexOf('OnGameStart')
@@ -139,8 +149,9 @@ jobs:
           $runtimeRepair = $runtimeSubmodule.IndexOf('RuntimeRepair.Install();')
           $nativeCompat = $runtimeSubmodule.IndexOf('NativeCreationCompatibility.Install();')
           $snapshotRepair = $runtimeSubmodule.IndexOf('NativeCreationLegacySnapshotRepair.Install();')
+          $mixedRaceRepair = $runtimeSubmodule.IndexOf('NativeCreationMixedRaceCompatibility.Install();')
           if ($gameStart -lt 0 -or $careerRepair -lt $gameStart -or $runtimeRepair -lt $gameStart) { throw 'Recovered runtime/campaign repairs must install at OnGameStart.' }
-          if ($nativeCompat -lt $gameStart -or $snapshotRepair -lt $nativeCompat) { throw 'NativeCreation snapshot repair must follow NativeCreation compatibility initialization at OnGameStart.' }
+          if ($nativeCompat -lt $gameStart -or $snapshotRepair -lt $nativeCompat -or $mixedRaceRepair -lt $snapshotRepair) { throw 'NativeCreation repairs are not installed in the required OnGameStart order.' }
 
           $linkedCareerRepair = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/LinkedCareerAbilityRepairInstaller.cs' -Raw
           foreach ($surface in @('typeof(CareerAbilityRepair)','new Harmony(','new HarmonyMethod(','ResolveAndCacheRuntimeMembers','_installed')) {
@@ -191,6 +202,20 @@ jobs:
           }
           if ($snapshot -match '\(FieldInfo\)\(object\)') { throw 'NativeCreation snapshot repair reproduced the invalid recovered FieldInfo cast.' }
 
+          $mixedRace = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/NativeCreationMixedRaceCompatibility.cs' -Raw
+          foreach ($surface in @('_legacyInProgressField','_legacyCandidateHeroField','SetSelectedCulture','SelectedCulture','ReferenceEquals(Hero.MainHero, candidate)','candidate.Culture = selectedCulture')) {
+            if ($mixedRace -notmatch [regex]::Escape($surface)) { throw "Missing NativeCreation mixed-race surface $surface" }
+          }
+          $mixedRaceCode = (($mixedRace -split "`r?`n") | Where-Object { $_ -notmatch '^\s*///' }) -join "`n"
+          if ($mixedRaceCode -match 'ApplyFinalEffects\s*\(') { throw 'Mixed-race repair must not execute campaign-start ApplyFinalEffects.' }
+          if ($mixedRaceCode -match 'Clan\.PlayerClan.*Culture\s*=') { throw 'Mixed-race repair must not replace player-clan culture.' }
+
+          $missileSafety = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/MissileCastingTargetTransitionSafety.cs' -Raw
+          foreach ($surface in @('MissileCastingBehavior','UpdateTarget','CurrentTarget','Formation','MakeGenericMethod','BeforeUpdateTarget','__result = __0','return false')) {
+            if ($missileSafety -notmatch [regex]::Escape($surface)) { throw "Missing TOR missile transition-safety surface $surface" }
+          }
+          if ($missileSafety -match 'NullReferenceException' -or $missileSafety -match 'finalizer\s*:') { throw 'Missile transition repair must not use broad exception swallowing.' }
+
           $harbinger = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/HarbingerAIControllerSafety.cs' -Raw
           foreach ($surface in @('SummonChampionScript','ShiftControllerToChampion','ShiftControllerToCaster','AgentControllerType.AI','IsRegisteredSharedHeroAgent')) {
             if ($harbinger -notmatch [regex]::Escape($surface)) { throw "Missing Greater Harbinger AI safety surface $surface" }
@@ -207,11 +232,11 @@ jobs:
           }
 
           $assemblyInfo = Get-Content 'src/IdentityGuard/Properties/AssemblyInfo.cs' -Raw
-          if ($assemblyInfo -notmatch 'AssemblyVersion\("1\.3\.7\.0"\)' -or $assemblyInfo -notmatch 'AssemblyFileVersion\("1\.3\.7\.0"\)') { throw 'IdentityGuard assembly version is not 1.3.7.0.' }
+          if ($assemblyInfo -notmatch 'AssemblyVersion\("1\.3\.8\.0"\)' -or $assemblyInfo -notmatch 'AssemblyFileVersion\("1\.3\.8\.0"\)') { throw 'IdentityGuard assembly version is not 1.3.8.0.' }
           $manifest = Get-Content 'module/SubModule.xml' -Raw
-          if ($manifest -notmatch '<Version value="v1\.3\.7"') { throw 'Module manifest is not v1.3.7.' }
-          if (-not (Test-Path 'module/CHANGELOG-1.3.7.md')) { throw 'v1.3.7 changelog is missing.' }
-          if (-not (Test-Path '.github/workflows/release-v1.3.7.yml')) { throw 'v1.3.7 release workflow is missing.' }
+          if ($manifest -notmatch '<Version value="v1\.3\.8"') { throw 'Module manifest is not v1.3.8.' }
+          if (-not (Test-Path 'module/CHANGELOG-1.3.8.md')) { throw 'v1.3.8 changelog is missing.' }
+          if (-not (Test-Path '.github/workflows/release-v1.3.8.yml')) { throw 'v1.3.8 release workflow is missing.' }
 
       - name: Inventory required outputs
         shell: pwsh
@@ -231,7 +256,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: full-module-v1.3.7
+          name: full-module-v1.3.8
           path: |
             src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll
             src/NativeCreation/bin/Release/MultiCharacterCampaignTOR.NativeCreation.dll
