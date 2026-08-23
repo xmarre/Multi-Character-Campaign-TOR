@@ -14,6 +14,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
 		{
 			base.OnSubModuleLoad();
 			HarmonyAssemblyResolver.Install();
+			MissileCastingTargetTransitionSafety.Install();
 			CareerButtonRefreshRepair.Install();
 			RegisteredCareerAbilityPrerequisite.Install();
 			RegisteredCareerAbilityIdentityRepair.Install();
@@ -37,6 +38,8 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
 			RuntimeRepair.Install();
 			NativeCreationCompatibility.Install();
 			NativeCreationLegacySnapshotRepair.Install();
+			NativeCreationMixedRaceCompatibility.Install();
+			MissileCastingTargetTransitionSafety.Install();
 
 			CareerButtonRefreshRepair.Install();
 			RegisteredCareerAbilityPrerequisite.Install();
