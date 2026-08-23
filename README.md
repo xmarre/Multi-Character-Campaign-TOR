@@ -4,19 +4,20 @@ Multi-Character Campaign support for **Mount & Blade II: Bannerlord 1.3.15** and
 
 The mod lets one campaign contain multiple persistent playable heroes. Registered characters can remain in the main party, lead independent player-clan parties, or become the active player character through the campaign management interface.
 
-## v1.3.7
+## v1.3.8
 
-Version 1.3.7 fixes the TOR 1.16 AI career controller-transition guard failing to install because `WizardAIComponent.Agent` was reflected as a property. TOR exposes the agent through the inherited Bannerlord `AgentComponent.Agent` field; MCC now resolves that field through the component hierarchy and restores the intended AI/player controller-transition protection.
+Version 1.3.8 fixes two TOR integration failures found in current 1.3.15/1.16 play:
 
-It also includes the v1.3.6 root fix for in-campaign **Create a new playable character**, where a decompiler-corrupted NativeCreation snapshot helper attempted to cast clan member-name strings to `FieldInfo` before TOR's native creation state could open.
+- TOR missile AI can retain partially torn-down target state while a mission is being replaced, notably during the hideout-to-boss transition. MCC now guards the exact `MissileCastingBehavior.UpdateTarget(Target)` invalid-state boundary while leaving valid TOR targeting unchanged.
+- Additional characters created with a race/culture different from the currently controlled hero could receive the previous hero's body/skeleton. MCC now commits Bannerlord's selected culture to the temporary active creation candidate before TOR performs its own native race/body initialization. Mixed-race shared campaigns are supported; MCC does not hard-code TOR race mappings.
 
-Additional current compatibility work includes registered non-spellcaster TOR career abilities, first-spawn AI career prerequisites, Greater Harbinger controller safety, companion dialogue activation, career-button rebinding, Harmony 2.4.x loader compatibility, defensive-battle intervention, reinforcement orders, and settlement character switching.
+The release retains the v1.3.7 WizardAI controller-transition repair, v1.3.6 NativeCreation snapshot fix, registered non-spellcaster TOR career abilities, first-spawn AI career prerequisites, Greater Harbinger controller safety, companion dialogue activation, career-button rebinding, Harmony 2.4.x loader compatibility, defensive-battle intervention, reinforcement orders, and settlement character switching.
 
-See [`module/CHANGELOG-1.3.7.md`](module/CHANGELOG-1.3.7.md) for the current release and [`module/CHANGELOG.md`](module/CHANGELOG.md) for the retained historical changelog.
+See [`module/CHANGELOG-1.3.8.md`](module/CHANGELOG-1.3.8.md) for the current release and [`module/CHANGELOG.md`](module/CHANGELOG.md) for the retained historical changelog.
 
 ## Build
 
-CI builds the complete six-project solution against the Bannerlord 1.3.15 reference assemblies, validates the exact movement, interaction, AI-lock, strength-query, map-event, tooltip, finance, encounter, inquiry, and game-menu surfaces, and separately verifies full-solution compatibility with Lib.Harmony 2.4.2. Current release guards also validate the NativeCreation snapshot repair and the TOR 1.16 inherited `WizardAIComponent` agent-field access path.
+CI builds the complete six-project solution against the Bannerlord 1.3.15 reference assemblies, validates the exact movement, interaction, AI-lock, strength-query, map-event, tooltip, finance, encounter, inquiry, game-menu, character-creation culture, and runtime compatibility surfaces, and separately verifies full-solution compatibility with Lib.Harmony 2.4.2. Current release guards cover the NativeCreation mixed-race transaction, TOR missile transition safety, the v1.3.7 inherited `WizardAIComponent` agent-field path, and the v1.3.6 NativeCreation snapshot repair.
 
 Most of the core source is reconstructed development source for the v1.0.41 runtime baseline. Its provenance and limitations are documented in the source directories and `module/SOURCE_INFO.md`.
 
