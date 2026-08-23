@@ -38,7 +38,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
                 Type missileBehaviorType = RequireType(
                     "TOR_Core.BattleMechanics.AI.CastingAI.AgentCastingBehavior.MissileCastingBehavior, TOR_Core");
                 Type targetType = RequireType(
-                    "TOR_Core.BattleMechanics.AI.CommonAIFunctions+Target, TOR_Core");
+                    "TOR_Core.BattleMechanics.AI.CommonAIFunctions.Target, TOR_Core");
 
                 _currentTargetField = RequireFieldInHierarchy(abstractBehaviorType, "CurrentTarget");
                 _formationField = RequireFieldInHierarchy(targetType, "Formation");
