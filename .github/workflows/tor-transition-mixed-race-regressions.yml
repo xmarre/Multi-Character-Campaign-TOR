@@ -78,8 +78,9 @@ jobs:
             if ($source -notmatch [regex]::Escape($surface)) { throw "Missing mixed-race compatibility surface: $surface" }
           }
 
-          if ($source -match 'ApplyFinalEffects\s*\(') { throw 'Mixed-race repair must not run Bannerlord campaign-start ApplyFinalEffects.' }
-          if ($source -match 'Clan\.PlayerClan.*Culture\s*=') { throw 'Mixed-race repair must not replace the persistent player-clan culture.' }
+          $codeOnly = (($source -split "`r?`n") | Where-Object { $_ -notmatch '^\s*///' }) -join "`n"
+          if ($codeOnly -match 'ApplyFinalEffects\s*\(') { throw 'Mixed-race repair must not run Bannerlord campaign-start ApplyFinalEffects.' }
+          if ($codeOnly -match 'Clan\.PlayerClan.*Culture\s*=') { throw 'Mixed-race repair must not replace the persistent player-clan culture.' }
 
           $submodule = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/SubModule.cs' -Raw
           if ($submodule -notmatch 'NativeCreationMixedRaceCompatibility\.Install\(\)') { throw 'Mixed-race compatibility installer is not wired.' }
