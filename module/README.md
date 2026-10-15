@@ -6,6 +6,12 @@ Target:
 - Mount & Blade II: Bannerlord 1.3.15
 - The Old Realms: War in the Mountains 1.16
 
+## v1.3.9: AI Mind Control lifecycle protection
+
+TOR's Mind Control career ability can retain a stale cached caster reference and continue into target selection after its caster has become invalid. For **registered shared heroes** casting as AI, MCC now checks the authoritative caster state before TOR's `MindControlScript.OnAfterTick`, corrects the script's cached caster reference on valid casts, and cancels an effect whose caster is absent, inactive, or no longer has a team. This is an event/script-boundary patch; it does not disable Mind Control, modify career choices, or change unrelated TOR casters.
+
+This change targets the crash reported after a Grey Lord became an AI-controlled companion. The compatibility fix passed compiled regression and runtime-install smoke tests; large-siege verification with the affected TOR installation remains recommended. Previously reported native access violations and freezes have not been established as the same defect.
+
 ## Features
 
 - Create additional persistent playable heroes inside an existing campaign.
