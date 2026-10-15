@@ -86,6 +86,7 @@ internal static class Program
             InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.BattleReinforcementOrderGuard");
             InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.SettlementCharacterSwitchMenuFix");
             VerifyInheritedAgentFieldResolver(runtime);
+            VerifyMindControlCasterGuard(runtime);
 
             Console.WriteLine("Runtime patch installation smoke test passed.");
             return 0;
@@ -143,6 +144,38 @@ internal static class Program
         }
 
         Console.WriteLine("Verified inherited Agent field resolver through the built RuntimeCompatibility assembly.");
+    }
+
+    private static void VerifyMindControlCasterGuard(Assembly runtime)
+    {
+        const string typeName = "MultiCharacterCampaignTOR.RuntimeCompatibility.AICareerAbilitySupport";
+        Type type = runtime.GetType(typeName, true);
+        MethodInfo validator = type.GetMethod("HasUsableMindControlCaster", StaticFlags);
+        MethodInfo prefix = type.GetMethod("MindControlOnAfterTickPrefix", StaticFlags);
+        if (validator == null || prefix == null || prefix.ReturnType != typeof(bool))
+        {
+            throw new MissingMethodException(typeName, "Mind Control lifecycle validator/prefix");
+        }
+
+        object caster = new object();
+        object team = new object();
+        object active = new object();
+        object inactive = new object();
+        AssertValidation(false, null, active, active, team, "missing caster");
+        AssertValidation(false, caster, inactive, active, team, "inactive caster");
+        AssertValidation(false, caster, active, active, null, "missing team");
+        AssertValidation(false, caster, active, null, team, "missing active state");
+        AssertValidation(true, caster, active, active, team, "live caster with team");
+        Console.WriteLine("Verified MCC Mind Control caster-lifecycle gate through the built RuntimeCompatibility assembly.");
+
+        void AssertValidation(bool expected, object agent, object state, object expectedActiveState, object actualTeam, string scenario)
+        {
+            bool actual = (bool)validator.Invoke(null, new[] { agent, state, expectedActiveState, actualTeam });
+            if (actual != expected)
+            {
+                throw new InvalidOperationException("Mind Control lifecycle decision failed: " + scenario);
+            }
+        }
     }
 
     private static Exception Unwrap(Exception exception)
