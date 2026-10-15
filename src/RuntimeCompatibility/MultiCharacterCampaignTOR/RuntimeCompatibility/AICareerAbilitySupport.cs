@@ -338,6 +338,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
 
         private static bool MindControlOnAfterTickPrefix(object __instance)
         {
+            bool sharedOwner = false;
             try
             {
                 object ability = _abilityScriptAbilityGetter.Invoke(__instance, null);
@@ -351,6 +352,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
                 {
                     return true;
                 }
+                sharedOwner = true;
 
                 object caster = _abilityScriptCasterAgentGetter.Invoke(__instance, null);
                 if (caster != null && HasUsableMindControlCaster(
@@ -375,9 +377,23 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
             }
             catch (Exception ex)
             {
-                // Do not turn unrelated errors inside a live cast into silently successful casts.
                 Log("Mind Control caster-lifecycle validation failed: " + Unwrap(ex));
-                return true;
+                if (!sharedOwner)
+                {
+                    // An unrelated TOR career script retains its original behavior.
+                    return true;
+                }
+                // A registered shared caster could not be validated. Do not resume its
+                // unchecked targeting path; best-effort stop, preserving the logged failure.
+                try
+                {
+                    _mindControlStopMethod?.Invoke(__instance, null);
+                }
+                catch (Exception stopError)
+                {
+                    Log("Mind Control cancellation failed: " + Unwrap(stopError));
+                }
+                return false;
             }
         }
 
