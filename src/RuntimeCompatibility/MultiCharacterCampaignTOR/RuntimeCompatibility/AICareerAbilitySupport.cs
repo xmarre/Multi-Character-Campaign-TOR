@@ -68,6 +68,11 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
         private static MethodInfo _abilityScriptCasterAgentGetter;
         private static MethodInfo _abilityScriptAbilityGetter;
         private static MethodInfo _careerAbilityAddChargeMethod;
+        private static MethodInfo _mindControlStopMethod;
+        private static MethodInfo _mindControlAgentStateGetter;
+        private static MethodInfo _mindControlAgentTeamGetter;
+        private static FieldInfo _mindControlCachedCasterField;
+        private static object _mindControlActiveState;
 
         private static PropertyInfo _mccBehaviorInstanceProperty;
         private static PropertyInfo _knownAbilitySystemProperty;
@@ -139,6 +144,7 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
                 PatchCareerAbilityCore(harmony);
                 PatchCareerAbilityScripts(harmony);
                 PatchCareerChargeContext(harmony);
+                PatchMindControlLifecycle(harmony);
 
                 _installed = true;
                 Log("Installed event-driven AI career-ability support for registered shared heroes.");
@@ -300,6 +306,77 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
             }
 
             Log("AI career script context installed: wrapped=" + contextMethods + ", rewritten=" + rewrittenMethods + ".");
+        }
+
+        // TOR MindControlScript overrides OnBeforeTick without calling CareerAbilityScript.OnBeforeTick.
+        // Its OnAfterTick invokes that base guard *after* the normal early-exit point in
+        // AbilityScript.OnTick. An inactive caster can therefore reach _caster.Team even after
+        // Stop() was requested. Also, _caster is cached in OnInit separately from CasterAgent.
+        // This guard applies only to career abilities owned by an MCC-registered shared hero.
+        private static void PatchMindControlLifecycle(Harmony harmony)
+        {
+            try
+            {
+                Type type = RequireType("TOR_Core.AbilitySystem.Scripts.MindControlScript, TOR_Core");
+                MethodInfo onAfterTick = FindUniqueMethod(type, "OnAfterTick", DeclaredInstanceFlags, 1);
+                _mindControlCachedCasterField = RequireField(type, "_caster", InstanceFlags);
+                _mindControlAgentStateGetter = RequireProperty(_agentType, "State", InstanceFlags).GetGetMethod(true);
+                _mindControlAgentTeamGetter = RequireProperty(_agentType, "Team", InstanceFlags).GetGetMethod(true);
+                _mindControlActiveState = Enum.Parse(_mindControlAgentStateGetter.ReturnType, "Active");
+                _mindControlStopMethod = FindUniqueMethod(_abilityScriptType, "Stop", InstanceFlags, 0);
+                harmony.Patch(
+                    onAfterTick,
+                    prefix: new HarmonyMethod(typeof(AICareerAbilitySupport), nameof(MindControlOnAfterTickPrefix)));
+                Log("Installed MCC Mind Control caster-lifecycle guard.");
+            }
+            catch (Exception ex)
+            {
+                // An upstream change to this one TOR script must not disable other AI career abilities.
+                Log("Mind Control caster-lifecycle guard unavailable on this TOR build: " + Unwrap(ex));
+            }
+        }
+
+        private static bool MindControlOnAfterTickPrefix(object __instance)
+        {
+            try
+            {
+                object ability = _abilityScriptAbilityGetter.Invoke(__instance, null);
+                if (ability == null || !_careerAbilityType.IsInstanceOfType(ability))
+                {
+                    return true;
+                }
+
+                object owner = _careerAbilityOwnerHeroField.GetValue(ability);
+                if (!IsRegisteredSharedHero(owner))
+                {
+                    return true;
+                }
+
+                object caster = _abilityScriptCasterAgentGetter.Invoke(__instance, null);
+                if (caster != null &&
+                    Equals(_mindControlAgentStateGetter.Invoke(caster, null), _mindControlActiveState) &&
+                    _mindControlAgentTeamGetter.Invoke(caster, null) != null)
+                {
+                    // TOR's private _caster is captured in OnInit and may no longer match the
+                    // authoritative caster assigned through AbilityScript.SetCasterAgent.
+                    if (!ReferenceEquals(_mindControlCachedCasterField.GetValue(__instance), caster))
+                    {
+                        _mindControlCachedCasterField.SetValue(__instance, caster);
+                    }
+                    return true;
+                }
+
+                // Do not let TOR enter _caster.Team or attempt target selection after death,
+                // removal, or an incomplete script initialization. Stop() already checks IsFading.
+                _mindControlStopMethod.Invoke(__instance, null);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                // Do not turn unrelated errors inside a live cast into silently successful casts.
+                Log("Mind Control caster-lifecycle validation failed: " + Unwrap(ex));
+                return true;
+            }
         }
 
         private static void PatchCareerChargeContext(Harmony harmony)
