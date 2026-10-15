@@ -86,6 +86,7 @@ internal static class Program
             InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.BattleReinforcementOrderGuard");
             InstallAndVerify(identity, "MultiCharacterCampaignTOR.IdentityGuard.SettlementCharacterSwitchMenuFix");
             VerifyInheritedAgentFieldResolver(runtime);
+            VerifyMindControlCasterGuard(runtime);
 
             Console.WriteLine("Runtime patch installation smoke test passed.");
             return 0;
@@ -143,6 +144,118 @@ internal static class Program
         }
 
         Console.WriteLine("Verified inherited Agent field resolver through the built RuntimeCompatibility assembly.");
+    }
+
+    private static void VerifyMindControlCasterGuard(Assembly runtime)
+    {
+        const string typeName = "MultiCharacterCampaignTOR.RuntimeCompatibility.AICareerAbilitySupport";
+        Type type = runtime.GetType(typeName, true);
+        MethodInfo validator = type.GetMethod("HasUsableMindControlCaster", StaticFlags);
+        MethodInfo prefix = type.GetMethod("MindControlOnAfterTickPrefix", StaticFlags);
+        if (validator == null || prefix == null || prefix.ReturnType != typeof(bool))
+        {
+            throw new MissingMethodException(typeName, "Mind Control lifecycle validator/prefix");
+        }
+
+        object caster = new object();
+        object team = new object();
+        object active = new object();
+        object inactive = new object();
+        AssertValidation(false, null, active, active, team, "missing caster");
+        AssertValidation(false, caster, inactive, active, team, "inactive caster");
+        AssertValidation(false, caster, active, active, null, "missing team");
+        AssertValidation(false, caster, active, null, team, "missing active state");
+        AssertValidation(true, caster, active, active, team, "live caster with team");
+        // Exercise the actual Harmony prefix with stand-in runtime objects. This catches
+        // missing field bindings, an incorrect skip decision, and failure to update _caster.
+        var snapshots = new Dictionary<FieldInfo, object>();
+        void Set(string name, object value)
+        {
+            FieldInfo field = type.GetField(name, StaticFlags);
+            if (field == null) throw new MissingFieldException(typeName, name);
+            snapshots.Add(field, field.GetValue(null));
+            field.SetValue(null, value);
+        }
+
+        try
+        {
+            Set("_abilityScriptAbilityGetter", typeof(SyntheticMindControlScript).GetProperty("Ability").GetGetMethod());
+            Set("_abilityScriptCasterAgentGetter", typeof(SyntheticMindControlScript).GetProperty("CasterAgent").GetGetMethod());
+            Set("_careerAbilityType", typeof(SyntheticCareerAbility));
+            Set("_careerAbilityOwnerHeroField", typeof(SyntheticCareerAbility).GetField("_ownerHero"));
+            Set("_mccBehaviorInstanceProperty", typeof(SyntheticSharedBehavior).GetProperty("Instance"));
+            Set("_isRegisteredSharedHeroMethod", typeof(SyntheticSharedBehavior).GetMethod("IsRegisteredSharedHero"));
+            Set("_mindControlAgentStateGetter", typeof(SyntheticCaster).GetProperty("State").GetGetMethod());
+            Set("_mindControlAgentTeamGetter", typeof(SyntheticCaster).GetProperty("Team").GetGetMethod());
+            Set("_mindControlActiveState", "Active");
+            Set("_mindControlCachedCasterField", typeof(SyntheticMindControlScript).GetField("_caster"));
+            Set("_mindControlStopMethod", typeof(SyntheticMindControlScript).GetMethod("Stop"));
+
+            var owner = new object();
+            var foreignOwner = new object();
+            SyntheticSharedBehavior.Instance.RegisteredOwner = owner;
+            var live = new SyntheticCaster { State = "Active", Team = team };
+            var dead = new SyntheticCaster { State = "Killed", Team = team };
+
+            AssertPrefix(new SyntheticMindControlScript { Ability = new SyntheticCareerAbility { _ownerHero = foreignOwner }, CasterAgent = dead }, true, false, "unrelated TOR hero");
+            AssertPrefix(new SyntheticMindControlScript { Ability = new SyntheticCareerAbility { _ownerHero = owner }, CasterAgent = dead }, false, true, "removed MCC caster");
+            AssertPrefix(new SyntheticMindControlScript { Ability = new SyntheticCareerAbility { _ownerHero = owner } }, false, true, "missing MCC caster");
+            AssertPrefix(new SyntheticMindControlScript { Ability = new SyntheticCareerAbility { _ownerHero = owner }, CasterAgent = new SyntheticCaster { State = "Active" } }, false, true, "teamless MCC caster");
+
+            var stale = new SyntheticMindControlScript { Ability = new SyntheticCareerAbility { _ownerHero = owner }, CasterAgent = live, _caster = dead };
+            AssertPrefix(stale, true, false, "live MCC caster");
+            if (!ReferenceEquals(stale._caster, live)) throw new InvalidOperationException("Mind Control caster cache was not reconciled.");
+        }
+        finally
+        {
+            foreach (KeyValuePair<FieldInfo, object> snapshot in snapshots)
+                snapshot.Key.SetValue(null, snapshot.Value);
+        }
+
+        Console.WriteLine("Verified MCC Mind Control lifecycle prefix through the built RuntimeCompatibility assembly.");
+
+        void AssertPrefix(SyntheticMindControlScript script, bool shouldContinue, bool shouldStop, string scenario)
+        {
+            bool result = (bool)prefix.Invoke(null, new object[] { script });
+            if (result != shouldContinue || script.Stopped != shouldStop)
+                throw new InvalidOperationException("Mind Control Harmony prefix failed: " + scenario);
+        }
+
+        void AssertValidation(bool expected, object agent, object state, object expectedActiveState, object actualTeam, string scenario)
+        {
+            bool actual = (bool)validator.Invoke(null, new[] { agent, state, expectedActiveState, actualTeam });
+            if (actual != expected)
+            {
+                throw new InvalidOperationException("Mind Control lifecycle decision failed: " + scenario);
+            }
+        }
+    }
+
+    private sealed class SyntheticSharedBehavior
+    {
+        public static SyntheticSharedBehavior Instance { get; } = new SyntheticSharedBehavior();
+        public object RegisteredOwner;
+        public bool IsRegisteredSharedHero(object hero) => ReferenceEquals(hero, RegisteredOwner);
+    }
+
+    private sealed class SyntheticCareerAbility
+    {
+        public object _ownerHero;
+    }
+
+    private sealed class SyntheticCaster
+    {
+        public string State { get; set; }
+        public object Team { get; set; }
+    }
+
+    private sealed class SyntheticMindControlScript
+    {
+        public SyntheticCareerAbility Ability { get; set; }
+        public SyntheticCaster CasterAgent { get; set; }
+        public SyntheticCaster _caster;
+        public bool Stopped;
+        public void Stop() => Stopped = true;
     }
 
     private static Exception Unwrap(Exception exception)

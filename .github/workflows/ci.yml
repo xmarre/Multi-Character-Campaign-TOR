@@ -118,7 +118,7 @@ jobs:
           $cultureField = $heroType.GetField('Culture', [System.Reflection.BindingFlags]'Public,Instance')
           if (-not $cultureField -or $cultureField.FieldType.FullName -ne 'TaleWorlds.CampaignSystem.CultureObject') { throw 'Hero.Culture public CultureObject field is unavailable.' }
 
-      - name: Inspect MCC v1.3.8 patch surfaces
+      - name: Inspect MCC current runtime patch surfaces
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -141,7 +141,7 @@ jobs:
 
           $runtimeSubmodule = Get-Content 'src/RuntimeCompatibility/MultiCharacterCampaignTOR/RuntimeCompatibility/SubModule.cs' -Raw
           foreach ($surface in @('HarmonyAssemblyResolver.Install()','LinkedCareerAbilityRepairInstaller.Install()','CareerButtonRefreshRepair.Install()','RegisteredCareerAbilityPrerequisite.Install()','RegisteredCareerAbilityIdentityRepair.Install()','AICareerAbilitySupport.Install()','AICareerAbilityActivationContext.Install()','AICareerAbilityTransitionGuard.Install()','HarbingerAIControllerSafety.Install()','CompanionDialogueEligibilityRepair.Install()','NativeCreationCompatibility.Install()','NativeCreationLegacySnapshotRepair.Install()','NativeCreationMixedRaceCompatibility.Install()','MissileCastingTargetTransitionSafety.Install()')) {
-            if ($runtimeSubmodule -notmatch [regex]::Escape($surface)) { throw "Missing v1.3.8 runtime compatibility installer surface $surface" }
+            if ($runtimeSubmodule -notmatch [regex]::Escape($surface)) { throw "Missing TOR runtime compatibility installer surface $surface" }
           }
           if ($runtimeSubmodule -match 'CareerAbilityRepair\.Install\(\);') { throw 'The recovered loader-sensitive CareerAbilityRepair.Install() must not be called.' }
           $gameStart = $runtimeSubmodule.IndexOf('OnGameStart')
@@ -231,12 +231,22 @@ jobs:
             if ($buttonRefresh -notmatch [regex]::Escape($surface)) { throw "Missing career-button refresh surface $surface" }
           }
 
+          [xml]$manifest = Get-Content 'module/SubModule.xml' -Raw
+          $moduleVersion = [string]$manifest.Module.Version.value
+          if ($moduleVersion -notmatch '^v(\d+\.\d+\.\d+)$') {
+            throw "Unexpected module manifest version: $moduleVersion"
+          }
+          $version = $Matches[1]
           $assemblyInfo = Get-Content 'src/IdentityGuard/Properties/AssemblyInfo.cs' -Raw
-          if ($assemblyInfo -notmatch 'AssemblyVersion\("1\.3\.8\.0"\)' -or $assemblyInfo -notmatch 'AssemblyFileVersion\("1\.3\.8\.0"\)') { throw 'IdentityGuard assembly version is not 1.3.8.0.' }
-          $manifest = Get-Content 'module/SubModule.xml' -Raw
-          if ($manifest -notmatch '<Version value="v1\.3\.8"') { throw 'Module manifest is not v1.3.8.' }
-          if (-not (Test-Path 'module/CHANGELOG-1.3.8.md')) { throw 'v1.3.8 changelog is missing.' }
-          if (-not (Test-Path '.github/workflows/release-v1.3.8.yml')) { throw 'v1.3.8 release workflow is missing.' }
+          foreach ($attribute in @('AssemblyVersion','AssemblyFileVersion')) {
+            $expected = '{0}("{1}.0")' -f $attribute, $version
+            if (-not $assemblyInfo.Contains($expected)) {
+              throw "IdentityGuard $attribute does not match the module version $moduleVersion."
+            }
+          }
+          foreach ($path in @("module/CHANGELOG-$version.md", ".github/workflows/release-v$version.yml")) {
+            if (-not (Test-Path $path)) { throw "Missing release metadata for $moduleVersion : $path" }
+          }
 
       - name: Inventory required outputs
         shell: pwsh
@@ -256,7 +266,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: full-module-v1.3.8
+          name: full-module-ci
           path: |
             src/MultiCharacterCampaignTOR/bin/Release/MultiCharacterCampaignTOR.dll
             src/NativeCreation/bin/Release/MultiCharacterCampaignTOR.NativeCreation.dll
