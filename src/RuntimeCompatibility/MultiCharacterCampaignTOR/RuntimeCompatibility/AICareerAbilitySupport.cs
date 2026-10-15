@@ -353,9 +353,11 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
                 }
 
                 object caster = _abilityScriptCasterAgentGetter.Invoke(__instance, null);
-                if (caster != null &&
-                    Equals(_mindControlAgentStateGetter.Invoke(caster, null), _mindControlActiveState) &&
-                    _mindControlAgentTeamGetter.Invoke(caster, null) != null)
+                if (caster != null && HasUsableMindControlCaster(
+                    caster,
+                    _mindControlAgentStateGetter.Invoke(caster, null),
+                    _mindControlActiveState,
+                    _mindControlAgentTeamGetter.Invoke(caster, null)))
                 {
                     // TOR's private _caster is captured in OnInit and may no longer match the
                     // authoritative caster assigned through AbilityScript.SetCasterAgent.
@@ -377,6 +379,13 @@ namespace MultiCharacterCampaignTOR.RuntimeCompatibility
                 Log("Mind Control caster-lifecycle validation failed: " + Unwrap(ex));
                 return true;
             }
+        }
+
+        // Kept independent of Bannerlord types so the exact cancel/continue decision can be
+        // exercised in the runtime smoke test without starting a mission.
+        private static bool HasUsableMindControlCaster(object caster, object state, object activeState, object team)
+        {
+            return caster != null && activeState != null && Equals(state, activeState) && team != null;
         }
 
         private static void PatchCareerChargeContext(Harmony harmony)
